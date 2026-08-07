@@ -1,6 +1,24 @@
 package json5
 
-import "testing"
+import (
+	"bytes"
+	"strings"
+	"testing"
+)
+
+type backtickJSONReceiver []byte
+
+func (r *backtickJSONReceiver) UnmarshalJSON(data []byte) error {
+	*r = append((*r)[:0], data...)
+	return nil
+}
+
+type backtickTextReceiver []byte
+
+func (r *backtickTextReceiver) UnmarshalText(data []byte) error {
+	*r = append((*r)[:0], data...)
+	return nil
+}
 
 func TestCheckValidBacktickStringValues(t *testing.T) {
 	tests := []struct {
@@ -91,5 +109,75 @@ func TestUnmarshalBacktickStringInterface(t *testing.T) {
 	want := string([]byte{0x00, 0x1f, 0xff, '\\', 'n'})
 	if len(got) != 1 || got[0] != want {
 		t.Fatalf("got = %#v, want []interface{}{%q}", got, []byte(want))
+	}
+}
+
+func TestBacktickStringUnmarshalInterfaces(t *testing.T) {
+	input := []byte("`line 1\r\n\\n'\"line 2`")
+	content := input[1 : len(input)-1]
+
+	var jsonValue backtickJSONReceiver
+	if err := Unmarshal(input, &jsonValue); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(jsonValue, input) {
+		t.Fatalf("UnmarshalJSON received %q, want %q", []byte(jsonValue), input)
+	}
+
+	var textValue backtickTextReceiver
+	if err := Unmarshal(input, &textValue); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(textValue, content) {
+		t.Fatalf("UnmarshalText received %q, want %q", []byte(textValue), content)
+	}
+}
+
+func TestBacktickStringRawMessage(t *testing.T) {
+	input := []byte("{value:`line 1\r\nline 2`}")
+	want := []byte("`line 1\r\nline 2`")
+	var got struct {
+		Value RawMessage
+	}
+	if err := Unmarshal(input, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got.Value, want) {
+		t.Fatalf("RawMessage = %q, want %q", []byte(got.Value), want)
+	}
+}
+
+func TestDecoderBacktickString(t *testing.T) {
+	dec := NewDecoder(strings.NewReader("`line 1\nline 2` true"))
+	var first string
+	if err := dec.Decode(&first); err != nil {
+		t.Fatal(err)
+	}
+	if first != "line 1\nline 2" {
+		t.Fatalf("first = %q", first)
+	}
+	var second bool
+	if err := dec.Decode(&second); err != nil {
+		t.Fatal(err)
+	}
+	if !second {
+		t.Fatal("second = false, want true")
+	}
+}
+
+func TestBacktickStringFirstBacktickTerminatesString(t *testing.T) {
+	input := []byte("{value:`a`b`}")
+	err := checkValid(input, new(scanner))
+	if err == nil {
+		t.Fatal("checkValid accepted content after the closing backtick")
+	}
+
+	syntaxErr, ok := err.(*SyntaxError)
+	if !ok {
+		t.Fatalf("error type = %T, want *SyntaxError", err)
+	}
+	want := "invalid character 'b' after object key:value pair"
+	if syntaxErr.msg != want {
+		t.Fatalf("error message = %q, want %q", syntaxErr.msg, want)
 	}
 }
