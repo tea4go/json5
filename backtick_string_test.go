@@ -166,7 +166,7 @@ func TestDecoderBacktickString(t *testing.T) {
 }
 
 func TestBacktickStringFirstBacktickTerminatesString(t *testing.T) {
-	input := []byte("{value:`a`b`}")
+	input := []byte("{value:`a`b}")
 	err := checkValid(input, new(scanner))
 	if err == nil {
 		t.Fatal("checkValid accepted content after the closing backtick")
