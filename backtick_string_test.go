@@ -61,3 +61,35 @@ func TestCheckValidRejectsUnclosedBacktickStringAtEOF(t *testing.T) {
 		t.Errorf("error offset = %d, want %d", syntaxErr.Offset, len(data))
 	}
 }
+
+func TestUnmarshalBacktickString(t *testing.T) {
+	input := []byte("{value:`\r\n  echo \"hello\"\n  echo 'world'\n  echo \\n\r`,empty:``}")
+	want := "\r\n  echo \"hello\"\n  echo 'world'\n  echo \\n\r"
+
+	var got struct {
+		Value string
+		Empty string
+	}
+	if err := Unmarshal(input, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Value != want {
+		t.Fatalf("Value bytes = %q, want %q", []byte(got.Value), []byte(want))
+	}
+	if got.Empty != "" {
+		t.Fatalf("Empty = %q, want empty string", got.Empty)
+	}
+}
+
+func TestUnmarshalBacktickStringInterface(t *testing.T) {
+	input := []byte{'[', '`', 0x00, 0x1f, 0xff, '\\', 'n', '`', ']'}
+
+	var got []interface{}
+	if err := Unmarshal(input, &got); err != nil {
+		t.Fatal(err)
+	}
+	want := string([]byte{0x00, 0x1f, 0xff, '\\', 'n'})
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("got = %#v, want []interface{}{%q}", got, []byte(want))
+	}
+}
