@@ -160,11 +160,11 @@ case '"', '\'', '`':
 
 `UnmarshalJSON` 收到包含首尾反引号和全部中间原始字节的数据。`UnmarshalText` 只收到中间原始字节。
 
-### 其他公共入口
+### 其他解析入口
 
-`Unmarshal`、`Decoder.Decode`、`Valid`、`Compact` 和 `Indent` 共用 scanner，因此应自然识别反引号值。
+`Unmarshal` 和 `Decoder.Decode` 共用 scanner，因此应自然识别反引号值。内部 `checkValid` 也必须接受合法的反引号值，并拒绝反引号对象键及未闭合 raw string。
 
-`Compact` 和 `Indent` 只能处理 raw string 外部的空白，不能删除或改写 raw string 内部的换行、空格、注释样式文本或控制字节。
+本仓库当前没有 `Valid`、`Compact` 或 `Indent` 公共函数。本次不为测试该扩展而新增这些 API。
 
 `RawMessage` 应保留包含首尾反引号的完整原始字面量。
 
@@ -206,9 +206,7 @@ README 必须明确说明反引号字符串是该 fork 默认启用的非标准 
 - `encoding.TextUnmarshaler`；
 - `json.Unmarshaler`；
 - `RawMessage`；
-- `Valid`；
-- `Compact`；
-- `Indent`。
+- 内部 `checkValid`。
 
 ### 错误与限制
 
