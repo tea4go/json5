@@ -137,6 +137,36 @@ func TestConvertFileRejectsSymlinkToInput(t *testing.T) {
 	}
 }
 
+func TestConvertFileRejectsSymlinkOutputToAnotherFile(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "input.json")
+	target := filepath.Join(dir, "target.json5")
+	output := filepath.Join(dir, "output.json5")
+	mustWrite(t, input, `{"new":true}`)
+	mustWrite(t, target, "original")
+	if err := os.Symlink(target, output); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	if err := convertFile(options{out: outputJSON5, indent: 0, input: input, output: output}); err == nil {
+		t.Fatal("convertFile() error = nil, want symlink output error")
+	}
+	info, err := os.Lstat(output)
+	if err != nil {
+		t.Fatalf("lstat output: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("output mode = %v, want symlink", info.Mode())
+	}
+	if got, err := os.Readlink(output); err != nil || got != target {
+		t.Fatalf("readlink output = %q, %v; want %q", got, err, target)
+	}
+	if got := mustRead(t, target); got != "original" {
+		t.Fatalf("target = %q, want original", got)
+	}
+	assertNoAtomicArtifacts(t, dir)
+}
+
 func TestConvertFileFailurePreservesExistingOutput(t *testing.T) {
 	dir := t.TempDir()
 	input := filepath.Join(dir, "input.json")

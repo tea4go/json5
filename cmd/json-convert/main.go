@@ -134,18 +134,19 @@ func writeFileAtomic(path string, data []byte) (err error) {
 		return err
 	}
 
+	outputInfo, statErr := os.Lstat(path)
+	if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+		return statErr
+	}
+	if statErr == nil && !outputInfo.Mode().IsRegular() {
+		return fmt.Errorf("refuse to replace non-regular output %q", path)
+	}
+
 	if err = renameFile(tempName, path); err == nil {
 		return nil
 	}
-	outputInfo, statErr := os.Lstat(path)
-	if statErr != nil {
-		if errors.Is(statErr, os.ErrNotExist) {
-			return err
-		}
-		return statErr
-	}
-	if !outputInfo.Mode().IsRegular() {
-		return fmt.Errorf("refuse to replace non-regular output %q", path)
+	if errors.Is(statErr, os.ErrNotExist) {
+		return err
 	}
 
 	backup, err := os.CreateTemp(dir, ".json-convert-backup-*")
