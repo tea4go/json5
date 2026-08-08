@@ -300,7 +300,11 @@ func (p *parser) parseObject(start position) (value, error) {
 		}
 		switch p.data[p.off] {
 		case '}':
-			m.trailingComments = comments
+			for _, c := range comments {
+				if c.startLine == m.endLine {
+					m.trailingComments = append(m.trailingComments, c)
+				}
+			}
 			members = append(members, m)
 			p.takeByte()
 			return value{kind: kindObject, pos: start, end: p.position(), object: members}, nil
@@ -315,7 +319,16 @@ func (p *parser) parseObject(start position) (value, error) {
 				if p.mode != modeJSON5 {
 					return value{}, p.errorf("trailing comma is not allowed")
 				}
-				m.trailingComments = append(comments, afterComma...)
+				for _, c := range comments {
+					if c.startLine == m.endLine {
+						m.trailingComments = append(m.trailingComments, c)
+					}
+				}
+				for _, c := range afterComma {
+					if c.startLine == commaLine {
+						m.trailingComments = append(m.trailingComments, c)
+					}
+				}
 				members = append(members, m)
 				p.takeByte()
 				return value{kind: kindObject, pos: start, end: p.position(), object: members}, nil

@@ -125,6 +125,35 @@ func TestCommentOwnershipAcrossValueAndCommaLines(t *testing.T) {
 	}
 }
 
+func TestObjectEndCommentOwnership(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		wantKeys []string
+		wantHint string
+	}{
+		{"detached without comma is discarded", "{last:1\n// object tail\n}", []string{"last"}, ""},
+		{"detached after trailing comma is discarded", "{last:1,\n// object tail\n}", []string{"last"}, ""},
+		{"same line without comma is trailing", "{last:1 /* trailing */\n}", []string{"last_hint", "last"}, "trailing"},
+		{"same line after comma is trailing", "{last:1, // trailing\n}", []string{"last_hint", "last"}, "trailing"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := parseDocument([]byte(tt.input), modeJSON5)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := addHintMembers(doc)
+			if keys := memberKeys(got); !reflect.DeepEqual(keys, tt.wantKeys) {
+				t.Fatalf("keys = %#v, want %#v", keys, tt.wantKeys)
+			}
+			if tt.wantHint != "" && string(got.object[0].value.text) != tt.wantHint {
+				t.Fatalf("hint = %q, want %q", got.object[0].value.text, tt.wantHint)
+			}
+		})
+	}
+}
+
 func memberKeys(v value) []string {
 	keys := make([]string, len(v.object))
 	for i := range v.object {
