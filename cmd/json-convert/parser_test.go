@@ -96,6 +96,16 @@ func TestParseJSONDecodesUnicodeEscapes(t *testing.T) {
 	}
 }
 
+func TestParseJSONDecodesEscapedNUL(t *testing.T) {
+	doc, err := parseDocument([]byte(`"before\u0000after"`), modeJSON)
+	if err != nil {
+		t.Fatalf("parseDocument returned error: %v", err)
+	}
+	if got, want := doc.text, []byte{'b', 'e', 'f', 'o', 'r', 'e', 0, 'a', 'f', 't', 'e', 'r'}; !bytes.Equal(got, want) {
+		t.Fatalf("decoded string = %q, want %q", got, want)
+	}
+}
+
 func TestParseJSONRejectsInvalidStrings(t *testing.T) {
 	tests := []struct {
 		name string
@@ -174,6 +184,19 @@ func TestParseJSON5StringsEscapesContinuationsAndRawBytes(t *testing.T) {
 	if len(doc.array) != len(want) {
 		t.Fatalf("items = %d, want %d", len(doc.array), len(want))
 	}
+	for i := range want {
+		if !bytes.Equal(doc.array[i].text, want[i]) {
+			t.Errorf("item %d = %q, want %q", i, doc.array[i].text, want[i])
+		}
+	}
+}
+
+func TestParseJSON5SingleAndDoubleQuotedEscapes(t *testing.T) {
+	doc, err := parseDocument([]byte(`['single\'quote',"double\"quote",'double\"escape',"slash\/escape"]`), modeJSON5)
+	if err != nil {
+		t.Fatalf("parseDocument returned error: %v", err)
+	}
+	want := [][]byte{[]byte("single'quote"), []byte(`double"quote`), []byte(`double"escape`), []byte("slash/escape")}
 	for i := range want {
 		if !bytes.Equal(doc.array[i].text, want[i]) {
 			t.Errorf("item %d = %q, want %q", i, doc.array[i].text, want[i])
@@ -308,6 +331,14 @@ func TestParseJSON5ReportsUnterminatedTokensAtPosition(t *testing.T) {
 
 func TestParseJSON5RejectsUnescapedNewlinesInQuotedStrings(t *testing.T) {
 	for _, input := range [][]byte{[]byte("'a\nb'"), []byte("\"a\rb\"")} {
+		if _, err := parseDocument(input, modeJSON5); err == nil {
+			t.Errorf("parseDocument(%q) succeeded, want error", input)
+		}
+	}
+}
+
+func TestParseJSON5RejectsRawControlsInQuotedStrings(t *testing.T) {
+	for _, input := range [][]byte{{'\'', 'a', 0x00, 'b', '\''}, {'"', 'a', 0x1f, 'b', '"'}} {
 		if _, err := parseDocument(input, modeJSON5); err == nil {
 			t.Errorf("parseDocument(%q) succeeded, want error", input)
 		}

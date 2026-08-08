@@ -43,11 +43,15 @@ func TestParseOptionsRejectsInvalidArgumentsAndPrintsUsage(t *testing.T) {
 		name string
 		args []string
 	}{
+		{"no arguments", nil},
 		{"missing out", []string{"in", "out"}},
+		{"out missing value", []string{"--out"}},
 		{"invalid out", []string{"--out", "yaml", "in", "out"}},
+		{"indent missing value", []string{"--out", "json", "--indent"}},
 		{"indent negative", []string{"--out", "json", "--indent", "-1", "in", "out"}},
 		{"indent too large", []string{"--out", "json", "--indent", "9", "in", "out"}},
 		{"indent noninteger", []string{"--out", "json", "--indent", "two", "in", "out"}},
+		{"unknown flag", []string{"--out", "json", "--unknown", "in", "out"}},
 		{"missing positional", []string{"--out", "json", "in"}},
 		{"extra positional", []string{"--out", "json", "in", "out", "extra"}},
 	}

@@ -23,3 +23,21 @@ C:\tmp\line-two`
 ```
 
 Other JSON5 implementations may reject this extension.
+
+## JSON conversion command
+
+Convert JSON5 to standard JSON:
+
+```sh
+go run ./cmd/json-convert --out json input.json5 output.json
+```
+
+Convert standard JSON to JSON5:
+
+```sh
+go run ./cmd/json-convert --out json5 input.json output.json5
+```
+
+Use `--indent 0` for compact output. Conversion preserves object member order
+and duplicate keys. When converting JSON5 to JSON, comments attached to an
+object member become a preceding `<name>_hint` member.
