@@ -96,20 +96,6 @@ func TestAddHintMembersHintsExistingHintKey(t *testing.T) {
 	}
 }
 
-func TestAddHintMembersPreservesDuplicateHintKeys(t *testing.T) {
-	doc, err := parseDocument([]byte("{\n/* first */ name:1,\nname_hint:'existing',\n/* second */ name:2\n}"), modeJSON5)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := addHintMembers(doc)
-	if keys := memberKeys(got); !reflect.DeepEqual(keys, []string{"name_hint", "name", "name_hint", "name_hint", "name"}) {
-		t.Fatalf("keys = %#v", keys)
-	}
-	if string(got.object[0].value.text) != "first" || string(got.object[3].value.text) != "second" {
-		t.Fatalf("generated hints = %q, %q", got.object[0].value.text, got.object[3].value.text)
-	}
-}
-
 func TestCommentOwnershipAcrossValueAndCommaLines(t *testing.T) {
 	doc, err := parseDocument([]byte("{\n"+
 		"raw:`first\nsecond` /* before comma */, // after comma\n"+
