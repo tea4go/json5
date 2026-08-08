@@ -76,12 +76,16 @@ type parser struct {
 
 func parseDocument(data []byte, mode parseMode) (value, error) {
 	p := parser{data: data, mode: mode, line: 1, col: 1}
-	p.skipWhitespace()
+	if _, err := p.skipSpaceAndComments(); err != nil {
+		return value{}, err
+	}
 	v, err := p.parseValue()
 	if err != nil {
 		return value{}, err
 	}
-	p.skipWhitespace()
+	if _, err := p.skipSpaceAndComments(); err != nil {
+		return value{}, err
+	}
 	if p.off != len(p.data) {
 		return value{}, p.errorf("unexpected trailing content")
 	}
@@ -125,6 +129,47 @@ func (p *parser) skipWhitespace() {
 	}
 }
 
+func (p *parser) skipSpaceAndComments() ([]comment, error) {
+	var comments []comment
+	for {
+		p.skipWhitespace()
+		if p.mode != modeJSON5 || p.off+1 >= len(p.data) || p.data[p.off] != '/' {
+			return comments, nil
+		}
+		start := p.position()
+		switch p.data[p.off+1] {
+		case '/':
+			begin := p.off
+			p.takeByte()
+			p.takeByte()
+			for p.off < len(p.data) && p.data[p.off] != '\r' && p.data[p.off] != '\n' {
+				p.takeByte()
+			}
+			end := p.position()
+			comments = append(comments, comment{raw: append([]byte(nil), p.data[begin:p.off]...), start: start, end: end, startLine: start.line, endLine: end.line})
+		case '*':
+			begin := p.off
+			p.takeByte()
+			p.takeByte()
+			for p.off+1 < len(p.data) && (p.data[p.off] != '*' || p.data[p.off+1] != '/') {
+				p.takeByte()
+			}
+			if p.off+1 >= len(p.data) {
+				for p.off < len(p.data) {
+					p.takeByte()
+				}
+				return nil, p.errorf("unterminated block comment")
+			}
+			p.takeByte()
+			p.takeByte()
+			end := p.position()
+			comments = append(comments, comment{raw: append([]byte(nil), p.data[begin:p.off]...), start: start, end: end, startLine: start.line, endLine: end.line})
+		default:
+			return comments, nil
+		}
+	}
+}
+
 func (p *parser) parseValue() (value, error) {
 	if p.off >= len(p.data) {
 		return value{}, p.errorf("expected value")
@@ -138,20 +183,49 @@ func (p *parser) parseValue() (value, error) {
 	case 'f':
 		return p.parseLiteral("false", kindBool, []byte("false"), start)
 	case '"':
-		text, err := p.parseJSONString()
+		text, err := p.parseQuotedString('"')
 		if err != nil {
 			return value{}, err
 		}
 		return value{kind: kindString, text: []byte(text), pos: start, end: p.position()}, nil
+	case '\'', '`':
+		if p.mode != modeJSON5 {
+			return value{}, p.errorf("expected value")
+		}
+		var text []byte
+		var err error
+		if p.data[p.off] == '`' {
+			text, err = p.parseRawString()
+		} else {
+			var decoded string
+			decoded, err = p.parseQuotedString('\'')
+			text = []byte(decoded)
+		}
+		if err != nil {
+			return value{}, err
+		}
+		return value{kind: kindString, text: text, pos: start, end: p.position()}, nil
 	case '[':
 		return p.parseArray(start)
 	case '{':
 		return p.parseObject(start)
-	case '-':
-		return p.parseJSONNumber(start)
+	case '-', '+', '.':
+		if p.mode == modeJSON5 {
+			return p.parseJSON5Number(start)
+		}
+		if p.data[p.off] == '-' {
+			return p.parseJSONNumber(start)
+		}
+		return value{}, p.errorf("expected value")
 	default:
 		if p.data[p.off] >= '0' && p.data[p.off] <= '9' {
+			if p.mode == modeJSON5 {
+				return p.parseJSON5Number(start)
+			}
 			return p.parseJSONNumber(start)
+		}
+		if p.mode == modeJSON5 && (p.hasToken("Infinity") || p.hasToken("NaN")) {
+			return p.parseJSON5Number(start)
 		}
 		return value{}, p.errorf("expected value")
 	}
@@ -169,55 +243,107 @@ func (p *parser) parseLiteral(token string, kind valueKind, text []byte, start p
 
 func (p *parser) parseObject(start position) (value, error) {
 	p.takeByte()
-	p.skipWhitespace()
+	leading, err := p.skipSpaceAndComments()
+	if err != nil {
+		return value{}, err
+	}
 	members := []member{}
 	if p.off < len(p.data) && p.data[p.off] == '}' {
 		p.takeByte()
 		return value{kind: kindObject, pos: start, end: p.position(), object: members}, nil
 	}
 	for {
-		if p.off >= len(p.data) || p.data[p.off] != '"' {
-			return value{}, p.errorf("expected quoted object key")
-		}
 		keyPos := p.position()
-		key, err := p.parseJSONString()
+		var key string
+		switch {
+		case p.off < len(p.data) && p.data[p.off] == '"':
+			key, err = p.parseQuotedString('"')
+		case p.mode == modeJSON5 && p.off < len(p.data) && p.data[p.off] == '\'':
+			key, err = p.parseQuotedString('\'')
+		case p.mode == modeJSON5 && p.off < len(p.data) && isIdentifierStart(p.data[p.off]):
+			key = p.parseIdentifier()
+		default:
+			if p.mode == modeJSON {
+				return value{}, p.errorf("expected quoted object key")
+			}
+			return value{}, p.errorf("expected object key")
+		}
 		if err != nil {
 			return value{}, err
 		}
-		p.skipWhitespace()
+		if _, err = p.skipSpaceAndComments(); err != nil {
+			return value{}, err
+		}
 		if p.off >= len(p.data) || p.data[p.off] != ':' {
 			return value{}, p.errorf("expected ':' after object key")
 		}
 		p.takeByte()
-		p.skipWhitespace()
+		if _, err = p.skipSpaceAndComments(); err != nil {
+			return value{}, err
+		}
 		item, err := p.parseValue()
 		if err != nil {
 			return value{}, err
 		}
-		members = append(members, member{key: key, value: item, keyPos: keyPos, endLine: item.end.line})
-		p.skipWhitespace()
+		m := member{key: key, value: item, keyPos: keyPos, endLine: item.end.line, leadingComments: leading}
+		comments, err := p.skipSpaceAndComments()
+		if err != nil {
+			return value{}, err
+		}
 		if p.off >= len(p.data) {
 			return value{}, p.errorf("expected ',' or '}'")
 		}
 		switch p.data[p.off] {
 		case '}':
+			m.trailingComments = comments
+			members = append(members, m)
 			p.takeByte()
 			return value{kind: kindObject, pos: start, end: p.position(), object: members}, nil
 		case ',':
 			p.takeByte()
-			p.skipWhitespace()
-			if p.off < len(p.data) && p.data[p.off] == '}' {
-				return value{}, p.errorf("trailing comma is not allowed")
+			afterComma, err := p.skipSpaceAndComments()
+			if err != nil {
+				return value{}, err
 			}
+			if p.off < len(p.data) && p.data[p.off] == '}' {
+				if p.mode != modeJSON5 {
+					return value{}, p.errorf("trailing comma is not allowed")
+				}
+				m.trailingComments = append(comments, afterComma...)
+				members = append(members, m)
+				p.takeByte()
+				return value{kind: kindObject, pos: start, end: p.position(), object: members}, nil
+			}
+			m.trailingComments = comments
+			members = append(members, m)
+			leading = afterComma
 		default:
 			return value{}, p.errorf("expected ',' or '}'")
 		}
 	}
 }
 
+func isIdentifierStart(b byte) bool {
+	return b >= 'A' && b <= 'Z' || b >= 'a' && b <= 'z' || b == '_' || b == '$'
+}
+
+func isIdentifierPart(b byte) bool {
+	return isIdentifierStart(b) || b >= '0' && b <= '9'
+}
+
+func (p *parser) parseIdentifier() string {
+	start := p.off
+	for p.off < len(p.data) && isIdentifierPart(p.data[p.off]) {
+		p.takeByte()
+	}
+	return string(p.data[start:p.off])
+}
+
 func (p *parser) parseArray(start position) (value, error) {
 	p.takeByte()
-	p.skipWhitespace()
+	if _, err := p.skipSpaceAndComments(); err != nil {
+		return value{}, err
+	}
 	items := []value{}
 	if p.off < len(p.data) && p.data[p.off] == ']' {
 		p.takeByte()
@@ -229,7 +355,9 @@ func (p *parser) parseArray(start position) (value, error) {
 			return value{}, err
 		}
 		items = append(items, item)
-		p.skipWhitespace()
+		if _, err := p.skipSpaceAndComments(); err != nil {
+			return value{}, err
+		}
 		if p.off >= len(p.data) {
 			return value{}, p.errorf("expected ',' or ']'")
 		}
@@ -239,9 +367,15 @@ func (p *parser) parseArray(start position) (value, error) {
 			return value{kind: kindArray, pos: start, end: p.position(), array: items}, nil
 		case ',':
 			p.takeByte()
-			p.skipWhitespace()
+			if _, err := p.skipSpaceAndComments(); err != nil {
+				return value{}, err
+			}
 			if p.off < len(p.data) && p.data[p.off] == ']' {
-				return value{}, p.errorf("trailing comma is not allowed")
+				if p.mode != modeJSON5 {
+					return value{}, p.errorf("trailing comma is not allowed")
+				}
+				p.takeByte()
+				return value{kind: kindArray, pos: start, end: p.position(), array: items}, nil
 			}
 		default:
 			return value{}, p.errorf("expected ',' or ']'")
@@ -249,12 +383,12 @@ func (p *parser) parseArray(start position) (value, error) {
 	}
 }
 
-func (p *parser) parseJSONString() (string, error) {
+func (p *parser) parseQuotedString(quote byte) (string, error) {
 	p.takeByte()
 	var out strings.Builder
 	for p.off < len(p.data) {
 		b := p.data[p.off]
-		if b == '"' {
+		if b == quote {
 			p.takeByte()
 			return out.String(), nil
 		}
@@ -268,7 +402,10 @@ func (p *parser) parseJSONString() (string, error) {
 			}
 			escape := p.takeByte()
 			switch escape {
-			case '"', '\\', '/':
+			case '"', '\'', '\\', '/':
+				if escape == '\'' && p.mode != modeJSON5 {
+					return "", p.errorf("invalid escape sequence")
+				}
 				out.WriteByte(escape)
 			case 'b':
 				out.WriteByte('\b')
@@ -286,6 +423,17 @@ func (p *parser) parseJSONString() (string, error) {
 					return "", err
 				}
 				out.WriteRune(r)
+			case '\n':
+				if p.mode != modeJSON5 {
+					return "", p.errorf("invalid escape sequence")
+				}
+			case '\r':
+				if p.mode != modeJSON5 {
+					return "", p.errorf("invalid escape sequence")
+				}
+				if p.off < len(p.data) && p.data[p.off] == '\n' {
+					p.takeByte()
+				}
 			default:
 				return "", p.errorf("invalid escape sequence")
 			}
@@ -304,6 +452,20 @@ func (p *parser) parseJSONString() (string, error) {
 		p.col++
 	}
 	return "", p.errorf("unterminated string")
+}
+
+func (p *parser) parseRawString() ([]byte, error) {
+	p.takeByte()
+	start := p.off
+	for p.off < len(p.data) {
+		if p.data[p.off] == '`' {
+			text := append([]byte(nil), p.data[start:p.off]...)
+			p.takeByte()
+			return text, nil
+		}
+		p.takeByte()
+	}
+	return nil, p.errorf("unterminated raw string")
 }
 
 func (p *parser) parseUnicodeEscape() (rune, error) {
@@ -354,6 +516,84 @@ func (p *parser) parseHex4() (uint16, error) {
 		p.takeByte()
 	}
 	return n, nil
+}
+
+func (p *parser) hasToken(token string) bool {
+	return len(p.data)-p.off >= len(token) && string(p.data[p.off:p.off+len(token)]) == token
+}
+
+func (p *parser) parseJSON5Number(start position) (value, error) {
+	tokenStart := p.off
+	if p.off < len(p.data) && (p.data[p.off] == '+' || p.data[p.off] == '-') {
+		p.takeByte()
+	}
+	if p.hasToken("Infinity") {
+		for range "Infinity" {
+			p.takeByte()
+		}
+		return p.finishJSON5Number(tokenStart, start)
+	}
+	if p.hasToken("NaN") && p.off == tokenStart {
+		for range "NaN" {
+			p.takeByte()
+		}
+		return p.finishJSON5Number(tokenStart, start)
+	}
+	if p.off+1 < len(p.data) && p.data[p.off] == '0' && (p.data[p.off+1] == 'x' || p.data[p.off+1] == 'X') {
+		p.takeByte()
+		p.takeByte()
+		digits := p.off
+		for p.off < len(p.data) && isHexDigit(p.data[p.off]) {
+			p.takeByte()
+		}
+		if p.off == digits {
+			return value{}, p.errorf("expected hexadecimal digit")
+		}
+		return p.finishJSON5Number(tokenStart, start)
+	}
+
+	digitsBefore := 0
+	for p.off < len(p.data) && p.data[p.off] >= '0' && p.data[p.off] <= '9' {
+		p.takeByte()
+		digitsBefore++
+	}
+	digitsAfter := 0
+	if p.off < len(p.data) && p.data[p.off] == '.' {
+		p.takeByte()
+		for p.off < len(p.data) && p.data[p.off] >= '0' && p.data[p.off] <= '9' {
+			p.takeByte()
+			digitsAfter++
+		}
+	}
+	if digitsBefore == 0 && digitsAfter == 0 {
+		return value{}, p.errorf("expected number")
+	}
+	if p.off < len(p.data) && (p.data[p.off] == 'e' || p.data[p.off] == 'E') {
+		p.takeByte()
+		if p.off < len(p.data) && (p.data[p.off] == '+' || p.data[p.off] == '-') {
+			p.takeByte()
+		}
+		digits := p.off
+		for p.off < len(p.data) && p.data[p.off] >= '0' && p.data[p.off] <= '9' {
+			p.takeByte()
+		}
+		if p.off == digits {
+			return value{}, p.errorf("expected digit in exponent")
+		}
+	}
+	return p.finishJSON5Number(tokenStart, start)
+}
+
+func isHexDigit(b byte) bool {
+	return b >= '0' && b <= '9' || b >= 'a' && b <= 'f' || b >= 'A' && b <= 'F'
+}
+
+func (p *parser) finishJSON5Number(tokenStart int, start position) (value, error) {
+	if p.off < len(p.data) && isIdentifierPart(p.data[p.off]) {
+		return value{}, p.errorf("invalid number token")
+	}
+	text := append([]byte(nil), p.data[tokenStart:p.off]...)
+	return value{kind: kindNumber, text: text, pos: start, end: p.position()}, nil
 }
 
 func (p *parser) parseJSONNumber(start position) (value, error) {
