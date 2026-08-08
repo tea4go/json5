@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"math/big"
 	"unicode/utf8"
 )
 
@@ -33,8 +34,18 @@ func (w *writer) writeValue(value value) error {
 	switch value.kind {
 	case kindNull:
 		w.WriteString("null")
-	case kindBool, kindNumber:
+	case kindBool:
 		w.Write(value.text)
+	case kindNumber:
+		if w.mode == outputJSON {
+			text, err := normalizeNumber(value.text)
+			if err != nil {
+				return fmt.Errorf("line %d, column %d: %w", value.pos.line, value.pos.column, err)
+			}
+			w.Write(text)
+		} else {
+			w.Write(value.text)
+		}
 	case kindString:
 		return w.writeString(value)
 	case kindArray:
@@ -45,6 +56,50 @@ func (w *writer) writeValue(value value) error {
 		return fmt.Errorf("line %d, column %d: invalid value kind", value.pos.line, value.pos.column)
 	}
 	return nil
+}
+
+func normalizeNumber(text []byte) ([]byte, error) {
+	original := string(text)
+	negative := false
+	if len(text) > 0 && (text[0] == '+' || text[0] == '-') {
+		negative = text[0] == '-'
+		text = text[1:]
+	}
+	if bytes.Equal(text, []byte("Infinity")) || bytes.Equal(text, []byte("NaN")) {
+		return nil, fmt.Errorf("non-finite number %s is not valid JSON", original)
+	}
+	if len(text) >= 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X') {
+		n := new(big.Int)
+		if _, ok := n.SetString(string(text[2:]), 16); !ok {
+			return nil, fmt.Errorf("invalid number %s", original)
+		}
+		if negative {
+			if n.Sign() == 0 {
+				return []byte("-0"), nil
+			}
+			n.Neg(n)
+		}
+		return []byte(n.String()), nil
+	}
+
+	out := append([]byte(nil), text...)
+	if len(out) > 0 && out[0] == '.' {
+		out = append([]byte{'0'}, out...)
+	}
+	exponent := len(out)
+	for i, b := range out {
+		if b == 'e' || b == 'E' {
+			exponent = i
+			break
+		}
+	}
+	if exponent > 0 && out[exponent-1] == '.' {
+		out = append(out[:exponent], append([]byte{'0'}, out[exponent:]...)...)
+	}
+	if negative {
+		out = append([]byte{'-'}, out...)
+	}
+	return out, nil
 }
 
 func (w *writer) writeString(value value) error {
@@ -98,6 +153,9 @@ func (w *writer) writeObject(members []member) error {
 	w.depth++
 	for i, member := range members {
 		w.writeSeparator(i)
+		if !utf8.ValidString(member.key) {
+			return fmt.Errorf("line %d, column %d: invalid UTF-8 in object key", member.keyPos.line, member.keyPos.column)
+		}
 		w.writeJSONString(member.key)
 		w.WriteByte(':')
 		if w.indent > 0 {
