@@ -167,6 +167,46 @@ func TestConvertFileOverwritesExistingOutput(t *testing.T) {
 	}
 }
 
+func TestWriteFileAtomicRejectsEmptyOutputDirectory(t *testing.T) {
+	dir := t.TempDir()
+	output := filepath.Join(dir, "output.json")
+	if err := os.Mkdir(output, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	err := writeFileAtomic(output, []byte("new"))
+	if err == nil {
+		t.Fatal("writeFileAtomic() error = nil, want directory error")
+	}
+	info, statErr := os.Stat(output)
+	if statErr != nil {
+		t.Fatalf("output directory was removed: %v", statErr)
+	}
+	if !info.IsDir() {
+		t.Fatalf("output = %q, want directory", output)
+	}
+	assertNoAtomicArtifacts(t, dir)
+}
+
+func TestWriteFileAtomicRejectsNonEmptyOutputDirectory(t *testing.T) {
+	dir := t.TempDir()
+	output := filepath.Join(dir, "output.json")
+	if err := os.Mkdir(output, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(output, "keep.txt")
+	mustWrite(t, marker, "keep")
+
+	err := writeFileAtomic(output, []byte("new"))
+	if err == nil {
+		t.Fatal("writeFileAtomic() error = nil, want directory error")
+	}
+	if got := mustRead(t, marker); got != "keep" {
+		t.Fatalf("marker = %q, want keep", got)
+	}
+	assertNoAtomicArtifacts(t, dir)
+}
+
 func TestWriteFileAtomicRestoresOldFileAfterReplacementFailure(t *testing.T) {
 	dir := t.TempDir()
 	output := filepath.Join(dir, "output.json")
