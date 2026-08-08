@@ -139,6 +139,46 @@ func TestCommentOwnershipAcrossValueAndCommaLines(t *testing.T) {
 	}
 }
 
+func TestAddHintMembersUsesTrailingCommentsAfterMultilineCompositeValues(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		field     string
+		wantHint  string
+		wantValue string
+	}{
+		{
+			name:      "object value",
+			input:     "{\nconfig: {\n  enabled: true\n}, // object hint\nafter: 1\n}",
+			field:     "config",
+			wantHint:  "object hint",
+			wantValue: "config_hint",
+		},
+		{
+			name:      "array value",
+			input:     "{\nitems: [\n  1,\n  2\n], // array hint\nafter: 1\n}",
+			field:     "items",
+			wantHint:  "array hint",
+			wantValue: "items_hint",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := parseDocument([]byte(tt.input), modeJSON5)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := addHintMembers(doc)
+			if keys := memberKeys(got); !reflect.DeepEqual(keys, []string{tt.wantValue, tt.field, "after"}) {
+				t.Fatalf("keys = %#v, want [%s %s after]", keys, tt.wantValue, tt.field)
+			}
+			if text := string(got.object[0].value.text); text != tt.wantHint {
+				t.Fatalf("hint = %q, want %q", text, tt.wantHint)
+			}
+		})
+	}
+}
+
 func TestObjectEndCommentOwnership(t *testing.T) {
 	tests := []struct {
 		name     string
