@@ -203,7 +203,7 @@ func TestParseJSON5ObjectKeys(t *testing.T) {
 }
 
 func TestParseJSON5NumbersPreserveTokens(t *testing.T) {
-	valid := []string{"0xFF", "+0x10", "-0Xf", "+12", "-12", ".5", "-.5", "+.5", "1.", "1.e2", "1E+2", "Infinity", "+Infinity", "-Infinity", "NaN"}
+	valid := []string{"0", "0.5", "0e2", "0xFF", "+0x10", "-0Xf", "+12", "-12", ".5", "-.5", "+.5", "1.", "1.e2", "1E+2", "Infinity", "+Infinity", "-Infinity", "NaN"}
 	for _, input := range valid {
 		doc, err := parseDocument([]byte(input), modeJSON5)
 		if err != nil {
@@ -215,7 +215,7 @@ func TestParseJSON5NumbersPreserveTokens(t *testing.T) {
 		}
 	}
 
-	invalid := []string{"0x", "+", ".", "1e", "1e+", "Infinityx", "NaNx", "0xFFz", "+true", "--1"}
+	invalid := []string{"01", "-01", "00", "0x", "+", ".", "1e", "1e+", "Infinityx", "NaNx", "0xFFz", "+true", "--1"}
 	for _, input := range invalid {
 		if _, err := parseDocument([]byte(input), modeJSON5); err == nil {
 			t.Errorf("parseDocument(%q) succeeded, want error", input)
@@ -243,6 +243,45 @@ func TestParseJSON5CommentsCaptureRawPositionsAndObjectOwnership(t *testing.T) {
 	}
 	if len(next) != 1 || string(next[0].raw) != "// next" || next[0].startLine != 3 || next[0].endLine != 3 {
 		t.Errorf("second leading comments = %+v", next)
+	}
+}
+
+func TestParseJSON5CommentAfterCommaOnMemberLineIsTrailing(t *testing.T) {
+	doc, err := parseDocument([]byte("{port:8080, /* c */ name:`demo`}"), modeJSON5)
+	if err != nil {
+		t.Fatalf("parseDocument returned error: %v", err)
+	}
+	port := doc.object[0]
+	name := doc.object[1]
+	if len(port.trailingComments) != 1 || string(port.trailingComments[0].raw) != "/* c */" {
+		t.Fatalf("port trailing comments = %+v, want /* c */", port.trailingComments)
+	}
+	if len(name.leadingComments) != 0 {
+		t.Fatalf("name leading comments = %+v, want none", name.leadingComments)
+	}
+}
+
+func TestParseJSON5CommentAfterCommaOnNextLineIsLeading(t *testing.T) {
+	doc, err := parseDocument([]byte("{port:8080,\n /* c */ name:`demo`}"), modeJSON5)
+	if err != nil {
+		t.Fatalf("parseDocument returned error: %v", err)
+	}
+	port := doc.object[0]
+	name := doc.object[1]
+	if len(port.trailingComments) != 0 {
+		t.Fatalf("port trailing comments = %+v, want none", port.trailingComments)
+	}
+	if len(name.leadingComments) != 1 || string(name.leadingComments[0].raw) != "/* c */" {
+		t.Fatalf("name leading comments = %+v, want /* c */", name.leadingComments)
+	}
+}
+
+func TestParseWhitespaceFormFeedByMode(t *testing.T) {
+	if _, err := parseDocument([]byte("{a:\f1}"), modeJSON5); err != nil {
+		t.Fatalf("JSON5 form feed returned error: %v", err)
+	}
+	if _, err := parseDocument([]byte("{\"a\":\f1}"), modeJSON); err == nil {
+		t.Fatal("JSON form feed succeeded, want error")
 	}
 }
 

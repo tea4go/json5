@@ -123,6 +123,11 @@ func (p *parser) skipWhitespace() {
 		switch p.data[p.off] {
 		case ' ', '\t', '\r', '\n':
 			p.takeByte()
+		case '\f':
+			if p.mode != modeJSON5 {
+				return
+			}
+			p.takeByte()
 		default:
 			return
 		}
@@ -315,6 +320,10 @@ func (p *parser) parseObject(start position) (value, error) {
 				return value{kind: kindObject, pos: start, end: p.position(), object: members}, nil
 			}
 			m.trailingComments = comments
+			for len(afterComma) > 0 && afterComma[0].startLine == m.endLine {
+				m.trailingComments = append(m.trailingComments, afterComma[0])
+				afterComma = afterComma[1:]
+			}
 			members = append(members, m)
 			leading = afterComma
 		default:
@@ -553,9 +562,17 @@ func (p *parser) parseJSON5Number(start position) (value, error) {
 	}
 
 	digitsBefore := 0
-	for p.off < len(p.data) && p.data[p.off] >= '0' && p.data[p.off] <= '9' {
+	if p.off < len(p.data) && p.data[p.off] == '0' {
 		p.takeByte()
-		digitsBefore++
+		digitsBefore = 1
+		if p.off < len(p.data) && p.data[p.off] >= '0' && p.data[p.off] <= '9' {
+			return value{}, p.errorf("leading zero is not allowed")
+		}
+	} else {
+		for p.off < len(p.data) && p.data[p.off] >= '0' && p.data[p.off] <= '9' {
+			p.takeByte()
+			digitsBefore++
+		}
 	}
 	digitsAfter := 0
 	if p.off < len(p.data) && p.data[p.off] == '.' {
