@@ -7,15 +7,15 @@
 
 ## 快速开始
 
-在仓库根目录运行以下 3 条命令：
+在 Windows 的 PowerShell 或 Git Bash 中，从仓库根目录运行以下 3 条命令：
 
 ```bash
-go build -o json-convert ./cmd/json-convert
-go run ./cmd/json-convert --out json5 input.json output.json5
-go run ./cmd/json-convert --out json --indent 4 input.json5 output.json
+go build -o json-convert.exe ./cmd/json-convert
+./json-convert.exe --out json5 input.json output.json5
+./json-convert.exe --out json --indent 4 input.json5 output.json
 ```
 
-第一条命令构建可执行文件；后两条命令分别执行 JSON → JSON5 和 JSON5 → JSON 转换。`go run` 必须从仓库根目录运行。
+第一条命令构建 Windows 可执行文件；后两条命令分别执行 JSON → JSON5 和 JSON5 → JSON 转换。Linux/macOS 请将输出文件名改为 `json-convert`，并使用 `./json-convert` 执行。
 
 ## 命令语法与参数
 
@@ -98,6 +98,20 @@ go run ./cmd/json-convert --out json5 --indent 2 input.json output.json5
   "z": 1.2300,
   "huge": 123456789012345678901234567890
 }
+```
+
+### 紧凑输出示例
+
+将严格 JSON 转为不带排版空白的 JSON5：
+
+```bash
+./json-convert.exe --out json5 --indent 0 input.json compact.json5
+```
+
+例如，输入 `{"name":"demo","enabled":true}` 时，`compact.json5` 为：
+
+```text
+{"name":`demo`,"enabled":true}
 ```
 
 ## JSON5 → JSON
@@ -292,6 +306,8 @@ go run ./cmd/json-convert --out json --indent 2 input.json5 output.json
 | `expected exactly two file paths` | `INPUT`、`OUTPUT` 缺失或有多余位置参数。 | 只保留恰好两个文件路径。 |
 | `input and output are the same file` | 路径相同，或路径通过硬链接/符号链接指向同一文件。 | 使用不同的输出文件。 |
 | `line N, column M: ...` | 输入语法错误。 | 按所示行列检查输入；注意 raw 中的 CR/LF 会影响行号。 |
+| `unterminated raw string` | raw 字符串缺少结束反引号。 | 在 raw 内容末尾添加反引号；内容本身不能包含反引号。 |
+| `parse input ...`（`--out json5`） | `--out json5` 的输入必须是严格 JSON，但输入含注释、单引号字符串、未加引号的键、尾随逗号等 JSON5 语法。 | 将输入改为严格 JSON；如果输入本来是 JSON5 并要转成 JSON，请改用 `--out json`。 |
 | `non-finite number ... is not valid JSON` | 尝试把 `Infinity` 或 `NaN` 写成严格 JSON。 | 改为有限数，或保留为字符串。 |
 | `invalid UTF-8 in string` | raw 字符串包含无效 UTF-8，无法写为严格 JSON。 | 先将内容转成有效 UTF-8。 |
 | `refuse to replace non-regular output` | 输出是目录、符号链接或其他特殊文件。 | 改用不存在的路径或普通文件。 |
@@ -304,13 +320,13 @@ go run ./cmd/json-convert --out json --indent 2 input.json5 output.json
 
 ```powershell
 # JSON → JSON5；路径含空格时使用引号
-go run ./cmd/json-convert --out json5 --indent 2 ".\data\input file.json" ".\data\output file.json5"
+./json-convert.exe --out json5 --indent 2 ".\data\input file.json" ".\data\output file.json5"
 
 # JSON5 → 紧凑 JSON
-go run ./cmd/json-convert --out json --indent 0 .\data\input.json5 .\data\output.json
+./json-convert.exe --out json --indent 0 .\data\input.json5 .\data\output.json
 
 # 获取原生可执行文件的退出码
-.\json-convert.exe --out json .\input.json5 .\output.json
+./json-convert.exe --out json .\input.json5 .\output.json
 $LASTEXITCODE
 ```
 
@@ -318,10 +334,10 @@ $LASTEXITCODE
 
 ```bash
 # JSON → JSON5
-go run ./cmd/json-convert --out json5 --indent 2 './data/input file.json' './data/output file.json5'
+./json-convert.exe --out json5 --indent 2 './data/input file.json' './data/output file.json5'
 
 # JSON5 → 紧凑 JSON
-go run ./cmd/json-convert --out json --indent 0 ./data/input.json5 ./data/output.json
+./json-convert.exe --out json --indent 0 ./data/input.json5 ./data/output.json
 
 # 获取退出码
 ./json-convert.exe --out json ./input.json5 ./output.json
