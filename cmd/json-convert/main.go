@@ -18,6 +18,11 @@ type options struct {
 	output string
 }
 
+var (
+	renameFile = os.Rename
+	removeFile = os.Remove
+)
+
 func parseOptions(args []string, stderr io.Writer) (options, error) {
 	var opts options
 	var out string
@@ -116,7 +121,7 @@ func writeFileAtomic(path string, data []byte) (err error) {
 	tempName := temp.Name()
 	defer func() {
 		temp.Close()
-		os.Remove(tempName)
+		removeFile(tempName)
 	}()
 
 	if _, err = temp.Write(data); err != nil {
@@ -129,7 +134,7 @@ func writeFileAtomic(path string, data []byte) (err error) {
 		return err
 	}
 
-	if err = os.Rename(tempName, path); err == nil {
+	if err = renameFile(tempName, path); err == nil {
 		return nil
 	}
 	if _, statErr := os.Lstat(path); statErr != nil {
@@ -148,25 +153,19 @@ func writeFileAtomic(path string, data []byte) (err error) {
 		os.Remove(backupName)
 		return err
 	}
-	if err = os.Remove(backupName); err != nil {
+	if err = removeFile(backupName); err != nil {
 		return err
 	}
-	if err = os.Rename(path, backupName); err != nil {
+	if err = renameFile(path, backupName); err != nil {
 		return err
 	}
-	restored := false
-	defer func() {
-		if !restored {
-			os.Remove(path)
-			_ = os.Rename(backupName, path)
+	if replaceErr := renameFile(tempName, path); replaceErr != nil {
+		if restoreErr := renameFile(backupName, path); restoreErr != nil {
+			return fmt.Errorf("replace output: %v; restore backup %q: %w", replaceErr, backupName, restoreErr)
 		}
-		os.Remove(backupName)
-	}()
-	if err = os.Rename(tempName, path); err != nil {
-		return err
+		return replaceErr
 	}
-	restored = true
-	if err = os.Remove(backupName); err != nil {
+	if err = removeFile(backupName); err != nil {
 		return err
 	}
 	return nil

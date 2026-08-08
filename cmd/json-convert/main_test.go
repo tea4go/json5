@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -166,6 +167,94 @@ func TestConvertFileOverwritesExistingOutput(t *testing.T) {
 	}
 }
 
+func TestWriteFileAtomicRestoresOldFileAfterReplacementFailure(t *testing.T) {
+	dir := t.TempDir()
+	output := filepath.Join(dir, "output.json")
+	mustWrite(t, output, "old")
+
+	originalRename := renameFile
+	originalRemove := removeFile
+	t.Cleanup(func() {
+		renameFile = originalRename
+		removeFile = originalRemove
+	})
+
+	calls := 0
+	renameFile = func(oldPath, newPath string) error {
+		calls++
+		switch calls {
+		case 1:
+			return errors.New("direct replacement failed")
+		case 2:
+			return os.Rename(oldPath, newPath)
+		case 3:
+			return errors.New("fallback replacement failed")
+		case 4:
+			return os.Rename(oldPath, newPath)
+		default:
+			t.Fatalf("unexpected rename %q -> %q", oldPath, newPath)
+			return nil
+		}
+	}
+	removeFile = os.Remove
+
+	err := writeFileAtomic(output, []byte("new"))
+	if err == nil || !strings.Contains(err.Error(), "fallback replacement failed") {
+		t.Fatalf("error = %v, want replacement failure", err)
+	}
+	if got := mustRead(t, output); got != "old" {
+		t.Fatalf("output = %q, want restored old content", got)
+	}
+	assertNoAtomicArtifacts(t, dir)
+}
+
+func TestWriteFileAtomicKeepsBackupWhenRestoreFails(t *testing.T) {
+	dir := t.TempDir()
+	output := filepath.Join(dir, "output.json")
+	mustWrite(t, output, "old")
+
+	originalRename := renameFile
+	originalRemove := removeFile
+	t.Cleanup(func() {
+		renameFile = originalRename
+		removeFile = originalRemove
+	})
+
+	calls := 0
+	renameFile = func(oldPath, newPath string) error {
+		calls++
+		switch calls {
+		case 1:
+			return errors.New("direct replacement failed")
+		case 2:
+			return os.Rename(oldPath, newPath)
+		case 3:
+			return errors.New("fallback replacement failed")
+		case 4:
+			return errors.New("restore failed")
+		default:
+			t.Fatalf("unexpected rename %q -> %q", oldPath, newPath)
+			return nil
+		}
+	}
+	removeFile = os.Remove
+
+	err := writeFileAtomic(output, []byte("new"))
+	if err == nil || !strings.Contains(err.Error(), "fallback replacement failed") || !strings.Contains(err.Error(), "restore failed") {
+		t.Fatalf("error = %v, want replacement and restore failures", err)
+	}
+	matches, globErr := filepath.Glob(filepath.Join(dir, ".json-convert-backup-*"))
+	if globErr != nil {
+		t.Fatal(globErr)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("backup files = %v, want one", matches)
+	}
+	if got := mustRead(t, matches[0]); got != "old" {
+		t.Fatalf("backup = %q, want old content", got)
+	}
+}
+
 func TestConvertFileReportsOutputDirectoryError(t *testing.T) {
 	dir := t.TempDir()
 	input := filepath.Join(dir, "input.json")
@@ -201,6 +290,19 @@ func TestRunSuccessHasNoStderr(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func assertNoAtomicArtifacts(t *testing.T, dir string) {
+	t.Helper()
+	for _, pattern := range []string{".json-convert-*", ".json-convert-backup-*"} {
+		matches, err := filepath.Glob(filepath.Join(dir, pattern))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(matches) != 0 {
+			t.Fatalf("atomic artifacts = %v, want none", matches)
+		}
 	}
 }
 
