@@ -3,3 +3,23 @@
 This is a Go package that implements decoding of
 [JSON5](https://github.com/json5/json5). See [the
 documentation](https://godoc.org/github.com/titanous/json5) for usage information.
+
+## Backtick raw strings
+
+This fork supports backtick-delimited raw strings as a non-standard JSON5
+extension. They are accepted only as values, not as object keys. Every byte
+between the delimiters is preserved exactly: quotes, backslashes, escape-like
+sequences, control bytes, and newlines are neither interpreted nor normalized.
+
+The first backtick after the opening delimiter ends the string, so the content
+cannot contain a backtick. For example, a shell variable can hold a multiline
+JSON5 document without escaping its raw string value:
+
+```sh
+payload='{
+  command: `printf "line one\n"
+C:\tmp\line-two`
+}'
+```
+
+Other JSON5 implementations may reject this extension.

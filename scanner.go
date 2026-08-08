@@ -232,6 +232,9 @@ func stateBeginValue(s *scanner, c byte) int {
 	case '\'':
 		s.step = stateInStringSingle
 		return scanBeginLiteral
+	case '`':
+		s.step = stateInStringBacktick
+		return scanBeginLiteral
 	case '-', '+':
 		s.step = stateSign
 		return scanBeginLiteral
@@ -475,6 +478,14 @@ func stateInStringSingle(s *scanner, c byte) int {
 	}
 	if c < 0x20 {
 		return s.error(c, "in string literal")
+	}
+	return scanContinue
+}
+
+// stateInStringBacktick is the state after reading "`".
+func stateInStringBacktick(s *scanner, c byte) int {
+	if c == '`' {
+		s.step = stateEndValue
 	}
 	return scanContinue
 }

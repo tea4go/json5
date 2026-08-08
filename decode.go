@@ -842,7 +842,7 @@ func (d *decodeState) literalStore(item []byte, v reflect.Value, fromQuoted, unq
 	if ut != nil {
 		s := item
 		if !unquotedString {
-			if item[0] != '"' && item[0] != '\'' {
+			if item[0] != '"' && item[0] != '\'' && item[0] != '`' {
 				if fromQuoted {
 					d.saveError(fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type()))
 				} else {
@@ -899,7 +899,7 @@ func (d *decodeState) literalStore(item []byte, v reflect.Value, fromQuoted, unq
 			}
 		}
 
-	case '"', '\'': // string
+	case '"', '\'', '`': // string
 		s := item
 		if !unquotedString {
 			var ok bool
@@ -1142,7 +1142,7 @@ func (d *decodeState) literalInterface() interface{} {
 	case 'N': // NaN
 		return math.NaN()
 
-	case '"', '\'': // string
+	case '"', '\'', '`': // string
 		s, ok := unquote(item)
 		if !ok {
 			d.error(errPhase)
@@ -1189,7 +1189,16 @@ func unquote(s []byte) (t string, ok bool) {
 }
 
 func unquoteBytes(s []byte) (t []byte, ok bool) {
-	if len(s) < 2 || (s[0] != '"' && s[0] != '\'') || (s[len(s)-1] != '"' && s[len(s)-1] != '\'') {
+	if len(s) < 2 {
+		return
+	}
+	if s[0] == '`' {
+		if s[len(s)-1] != '`' {
+			return
+		}
+		return s[1 : len(s)-1], true
+	}
+	if (s[0] != '"' && s[0] != '\'') || (s[len(s)-1] != '"' && s[len(s)-1] != '\'') {
 		return
 	}
 	orig := s
