@@ -305,6 +305,7 @@ func (p *parser) parseObject(start position) (value, error) {
 			p.takeByte()
 			return value{kind: kindObject, pos: start, end: p.position(), object: members}, nil
 		case ',':
+			commaLine := p.line
 			p.takeByte()
 			afterComma, err := p.skipSpaceAndComments()
 			if err != nil {
@@ -319,13 +320,24 @@ func (p *parser) parseObject(start position) (value, error) {
 				p.takeByte()
 				return value{kind: kindObject, pos: start, end: p.position(), object: members}, nil
 			}
-			m.trailingComments = comments
-			for len(afterComma) > 0 && afterComma[0].startLine == m.endLine {
-				m.trailingComments = append(m.trailingComments, afterComma[0])
-				afterComma = afterComma[1:]
+			var nextLeading []comment
+			for _, c := range comments {
+				if c.startLine == m.endLine {
+					m.trailingComments = append(m.trailingComments, c)
+				} else {
+					nextLeading = append(nextLeading, c)
+				}
+			}
+			m.endLine = commaLine
+			for _, c := range afterComma {
+				if c.startLine == commaLine {
+					m.trailingComments = append(m.trailingComments, c)
+				} else {
+					nextLeading = append(nextLeading, c)
+				}
 			}
 			members = append(members, m)
-			leading = afterComma
+			leading = nextLeading
 		default:
 			return value{}, p.errorf("expected ',' or '}'")
 		}
