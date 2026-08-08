@@ -32,7 +32,7 @@ type position struct {
 }
 
 type comment struct {
-	raw       string
+	raw       []byte
 	start     position
 	end       position
 	startLine int
@@ -50,7 +50,7 @@ type member struct {
 
 type value struct {
 	kind   valueKind
-	text   string
+	text   []byte
 	pos    position
 	end    position
 	array  []value
@@ -63,7 +63,7 @@ type parseError struct {
 }
 
 func (e *parseError) Error() string {
-	return fmt.Sprintf("line %d column %d: %s", e.pos.line, e.pos.column, e.message)
+	return fmt.Sprintf("line %d, column %d: %s", e.pos.line, e.pos.column, e.message)
 }
 
 type parser struct {
@@ -99,10 +99,16 @@ func (p *parser) errorf(format string, args ...any) error {
 func (p *parser) takeByte() byte {
 	b := p.data[p.off]
 	p.off++
-	if b == '\n' {
+	switch b {
+	case '\r':
 		p.line++
 		p.col = 1
-	} else {
+	case '\n':
+		if p.off < 2 || p.data[p.off-2] != '\r' {
+			p.line++
+			p.col = 1
+		}
+	default:
 		p.col++
 	}
 	return b
@@ -126,17 +132,17 @@ func (p *parser) parseValue() (value, error) {
 	start := p.position()
 	switch p.data[p.off] {
 	case 'n':
-		return p.parseLiteral("null", kindNull, "", start)
+		return p.parseLiteral("null", kindNull, nil, start)
 	case 't':
-		return p.parseLiteral("true", kindBool, "true", start)
+		return p.parseLiteral("true", kindBool, []byte("true"), start)
 	case 'f':
-		return p.parseLiteral("false", kindBool, "false", start)
+		return p.parseLiteral("false", kindBool, []byte("false"), start)
 	case '"':
 		text, err := p.parseJSONString()
 		if err != nil {
 			return value{}, err
 		}
-		return value{kind: kindString, text: text, pos: start, end: p.position()}, nil
+		return value{kind: kindString, text: []byte(text), pos: start, end: p.position()}, nil
 	case '[':
 		return p.parseArray(start)
 	case '{':
@@ -151,7 +157,7 @@ func (p *parser) parseValue() (value, error) {
 	}
 }
 
-func (p *parser) parseLiteral(token string, kind valueKind, text string, start position) (value, error) {
+func (p *parser) parseLiteral(token string, kind valueKind, text []byte, start position) (value, error) {
 	if len(p.data)-p.off < len(token) || string(p.data[p.off:p.off+len(token)]) != token {
 		return value{}, p.errorf("invalid literal")
 	}
@@ -391,6 +397,6 @@ func (p *parser) parseJSONNumber(start position) (value, error) {
 			p.takeByte()
 		}
 	}
-	text := string(p.data[tokenStart:p.off])
+	text := append([]byte(nil), p.data[tokenStart:p.off]...)
 	return value{kind: kindNumber, text: text, pos: start, end: p.position()}, nil
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"strings"
 	"testing"
@@ -22,13 +23,13 @@ func TestParseJSONPreservesObjectOrderDuplicatesAndLexemes(t *testing.T) {
 			t.Errorf("member %d key = %q, want %q", i, doc.object[i].key, want)
 		}
 	}
-	if got := doc.object[0].value.text; got != "1.2300" {
+	if got := doc.object[0].value.text; !bytes.Equal(got, []byte("1.2300")) {
 		t.Errorf("decimal text = %q, want %q", got, "1.2300")
 	}
-	if got := doc.object[1].value.text; got != "123456789012345678901234567890" {
+	if got := doc.object[1].value.text; !bytes.Equal(got, []byte("123456789012345678901234567890")) {
 		t.Errorf("integer text = %q", got)
 	}
-	if got := doc.object[2].value.text; got != "line\n\"q\"" {
+	if got := doc.object[2].value.text; !bytes.Equal(got, []byte("line\n\"q\"")) {
 		t.Errorf("decoded string = %q", got)
 	}
 }
@@ -58,16 +59,29 @@ func TestParseJSONRejectsJSON5Syntax(t *testing.T) {
 }
 
 func TestParseJSONReportsLineAndColumn(t *testing.T) {
-	_, err := parseDocument([]byte("{\n  \"a\":1,\n  \"b\": @\n}"), modeJSON)
-	if err == nil {
-		t.Fatal("parseDocument succeeded, want error")
+	tests := []struct {
+		name string
+		data string
+		want string
+	}{
+		{"LF", "{\n  \"a\":1,\n  \"b\": @\n}", "line 3, column 8: expected value"},
+		{"CRLF", "{\r\n  \"a\":1,\r\n  \"b\": @\r\n}", "line 3, column 8: expected value"},
+		{"CR", "{\r  \"a\":1,\r  \"b\": @\r}", "line 3, column 8: expected value"},
 	}
-	var parseErr *parseError
-	if !errors.As(err, &parseErr) {
-		t.Fatalf("error type = %T, want *parseError", err)
-	}
-	if parseErr.pos.line != 3 || parseErr.pos.column != 8 {
-		t.Fatalf("error position = line %d column %d, want line 3 column 8", parseErr.pos.line, parseErr.pos.column)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseDocument([]byte(tt.data), modeJSON)
+			if err == nil {
+				t.Fatal("parseDocument succeeded, want error")
+			}
+			var parseErr *parseError
+			if !errors.As(err, &parseErr) {
+				t.Fatalf("error type = %T, want *parseError", err)
+			}
+			if got := err.Error(); got != tt.want {
+				t.Fatalf("error = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -77,7 +91,7 @@ func TestParseJSONDecodesUnicodeEscapes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseDocument returned error: %v", err)
 	}
-	if got, want := doc.text, "A=A smile=😀"; got != want {
+	if got, want := doc.text, []byte("A=A smile=😀"); !bytes.Equal(got, want) {
 		t.Fatalf("decoded string = %q, want %q", got, want)
 	}
 }
@@ -111,7 +125,7 @@ func TestParseJSONNumberGrammar(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseDocument(%q) returned error: %v", input, err)
 			}
-			if doc.kind != kindNumber || doc.text != input {
+			if doc.kind != kindNumber || string(doc.text) != input {
 				t.Fatalf("number = kind %v text %q", doc.kind, doc.text)
 			}
 		})
