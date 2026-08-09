@@ -181,3 +181,75 @@ func TestBacktickStringFirstBacktickTerminatesString(t *testing.T) {
 		t.Fatalf("error message = %q, want %q", syntaxErr.msg, want)
 	}
 }
+
+func TestUnmarshalBacktickStringValuePositions(t *testing.T) {
+	const want = "raw string"
+	tests := []struct {
+		name   string
+		input  string
+		decode func([]byte) (string, error)
+	}{
+		{
+			name:  "top level",
+			input: "`raw string`",
+			decode: func(data []byte) (string, error) {
+				var got string
+				err := Unmarshal(data, &got)
+				return got, err
+			},
+		},
+		{
+			name:  "object value",
+			input: "{value:`raw string`}",
+			decode: func(data []byte) (string, error) {
+				var got struct {
+					Value string
+				}
+				err := Unmarshal(data, &got)
+				return got.Value, err
+			},
+		},
+		{
+			name:  "array element",
+			input: "[`raw string`]",
+			decode: func(data []byte) (string, error) {
+				var got []string
+				err := Unmarshal(data, &got)
+				if err != nil || len(got) != 1 {
+					return "", err
+				}
+				return got[0], nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.decode([]byte(tt.input))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != want {
+				t.Fatalf("decoded value = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestUnmarshalBacktickStringPreservesEveryByte(t *testing.T) {
+	content := []byte{
+		'\'', '"', '\\', 'n', '\\', 't', '\\', 'u', '4', 'e', '2', 'd', '\\', '\\',
+		'\n', '\n', ' ', '\t', 'x', '\r', '\n', '\r',
+		0x00, 0x01, 0x1f, 0x7f, 0xff,
+	}
+	input := append([]byte{'`'}, content...)
+	input = append(input, '`')
+
+	var got string
+	if err := Unmarshal(input, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal([]byte(got), content) {
+		t.Fatalf("decoded bytes = %v, want %v", []byte(got), content)
+	}
+}
