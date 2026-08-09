@@ -2,7 +2,7 @@
 
 English | [中文](README_zh.md)
 
-`json-convert` performs bidirectional file-to-file conversion between strict JSON and the JSON5 subset supported by this project. It can also derive a Go object definition file from JSON5. The converter uses an ordered syntax tree, so it preserves object member order, duplicate keys, and original number text. When converting JSON5 to JSON, it can also convert comments associated with object members into `<field-name>_hint` fields.
+`json-convert` performs bidirectional file-to-file conversion between strict JSON and the JSON5 subset supported by this project. It can also derive a Go struct definition file from JSON5. The converter uses an ordered syntax tree, so it preserves object member order, duplicate keys, and original number text. When converting JSON5 to JSON, it can also convert comments associated with object members into `<field-name>_hint` fields.
 
 > [!IMPORTANT]
 > The backtick-delimited raw strings generated and accepted by this tool are a project extension and are **not standard JSON5 syntax**. Before sending output to another JSON5 implementation, confirm that it supports backtick strings; otherwise, use `--out json` to generate strict JSON.
@@ -18,7 +18,7 @@ go build -o json-convert.exe ./cmd/json-convert
 ./json-convert.exe --out golang config.json5 config.go
 ```
 
-The first command builds the Windows executable. The remaining three commands perform JSON → JSON5, JSON5 → JSON, and JSON5 → Go definition conversion, respectively. On Linux/macOS, change the output filename to `json-convert` and run it as `./json-convert`.
+The first command builds the Windows executable. The remaining three commands perform JSON → JSON5, JSON5 → JSON, and conversion to Go struct definitions, respectively. On Linux/macOS, change the output filename to `json-convert` and run it as `./json-convert`.
 
 ## Command Syntax and Options
 
@@ -30,7 +30,7 @@ json-convert --out json|json5|golang [--indent 0..8] INPUT [OUTPUT]
 | --- | --- | --- | --- |
 | `--out json` or `--out=json` | Yes (choose one of three) | None | Converts JSON5 input to strict JSON. |
 | `--out json5` or `--out=json5` | Yes (choose one of three) | None | Converts strict JSON input to this project's JSON5 format. |
-| `--out golang` or `--out=golang` | Yes (choose one of three) | None | Converts JSON5 input to a Go object definition file. |
+| `--out golang` or `--out=golang` | Yes (choose one of three) | None | Converts JSON5 input to a Go struct definition file. |
 | `--indent N` or `--indent=N` | No | `2` | Number of spaces per indentation level. `N` must be an integer from `0` to `8`; `0` produces compact output. This option is ignored when generating Go files. |
 | `INPUT` | Yes | None | Input file path. |
 | `OUTPUT` | No | Derived automatically | Output file path. If omitted or explicitly passed as empty, the tool generates a filename consisting of `<input-name>_convert` plus the target extension. |
@@ -65,7 +65,7 @@ Supported:
 - double-quoted strings and standard JSON escapes, including Unicode surrogate pairs;
 - arrays and objects; object keys must be double-quoted;
 - standard decimal numbers and exponents, such as `-0`, `1.0`, and `1E+2`;
-- space, Tab, LF, and CR whitespace.
+- space, tab, LF, and CR whitespace.
 
 Rejected:
 
@@ -73,7 +73,7 @@ Rejected:
 - trailing commas in arrays or objects;
 - `+1`, `.5`, `1.`, hexadecimal numbers, `Infinity`, and `NaN`;
 - leading zeros (such as `01`), invalid escapes, unescaped control characters, invalid UTF-8, and unpaired surrogates;
-- Form Feed whitespace and extra content after the root value.
+- form feed whitespace and extra content after the root value.
 
 Object members are emitted in input order, and duplicate keys are not merged. Numbers are not parsed as floating point, so their original text is preserved; for example, `1.2300`, `1E+6`, and integers of arbitrary length remain unchanged.
 
@@ -132,11 +132,11 @@ With `--out json`, the input is parsed as the JSON5 subset supported by this pro
 
 - `//` line comments and `/* ... */` block comments;
 - double-quoted and single-quoted strings, plus the project's backtick-delimited raw string extension;
-- double-quoted keys, single-quoted keys, or unquoted keys that begin with an ASCII letter, `_`, or `$` and may subsequently contain digits;
+- double-quoted keys, single-quoted keys, or unquoted keys that begin with an ASCII letter, `_`, or `$` and may be followed by ASCII letters, digits, underscores, or dollar signs;
 - trailing commas in arrays and objects;
 - JSON5 number forms: hexadecimal, leading `+`, leading decimal point, trailing decimal point, `Infinity`, and `NaN`;
 - LF, CR, or CRLF backslash continuations in double-quoted or single-quoted strings;
-- space, Tab, LF, CR, and Form Feed whitespace.
+- space, tab, LF, CR, and form feed whitespace.
 
 ### Explicitly Rejected Input
 
@@ -149,13 +149,13 @@ With `--out json`, the input is parsed as the JSON5 subset supported by this pro
 
 ### Strict JSON Output and Number Conversion
 
-Both object keys and string values in the output use standard JSON double quotes and escapes. Member order and duplicate keys remain preserved.
+Both object keys and string values in the output use standard JSON double quotes and escapes. Member order and duplicate keys are preserved.
 
 Numbers are not converted through `float64`, so floating-point precision is not lost:
 
 | JSON5 Input | JSON Output | Rule |
 | --- | --- | --- |
-| `0xFF`, `+0Xff` | `255` | Hexadecimal values are converted with arbitrary-precision integers. |
+| `0xFF`, `+0Xff` | `255` | Hexadecimal values are converted using arbitrary-precision integer arithmetic. |
 | `-0xFF` | `-255` | The minus sign is preserved. |
 | `+12` | `12` | The leading `+` is removed. |
 | `.5`, `+.5`, `-.5` | `0.5`, `0.5`, `-0.5` | The integer part is added. |
@@ -163,7 +163,7 @@ Numbers are not converted through `float64`, so floating-point precision is not 
 | `1.2300`, `1E+6` | Unchanged | Original text is preserved when it is already a valid JSON number. |
 | `Infinity`, `+Infinity`, `-Infinity`, `NaN` | Conversion fails | Non-finite numbers are not valid JSON. |
 
-Decimal number and exponent text is not evaluated. Arbitrarily long hexadecimal integers are converted with arbitrary-precision integers. `-0x0` is emitted as `-0`.
+Decimal number and exponent text is not evaluated. Arbitrarily long hexadecimal integers are converted using arbitrary-precision integer arithmetic. `-0x0` is emitted as `-0`.
 
 ### Complete Comment and Number Example
 
@@ -209,10 +209,10 @@ Here, `\n` in the input `raw` value consists of two ordinary bytes—a backslash
 Comments are processed only when converting JSON5 to JSON. The rules are:
 
 1. Hints are generated only for **object members**. Associated comments are combined into a string, and a `<original-key>_hint` member is inserted before the original member.
-2. When multiple comments are associated with the same member, they are cleaned in appearance order and joined with LF.
+2. When multiple comments are associated with the same member, they are cleaned in order of appearance and joined with LF.
 3. A comment on the same line after a member value belongs to that member. A comment after the comma on the same line also belongs to the preceding member.
 4. A comment on a new line before the next member belongs to the next member.
-5. A comment on the same line after a multiline object or array value closes belongs to that object member.
+5. A comment on the same line after the closing delimiter of a multiline object or array value belongs to that object member.
 6. Top-level comments, array-element comments, trailing document comments, and object-tail comments on a new line after the object's last member are removed without generating hints.
 7. An empty comment that remains empty after cleaning does not generate a hint.
 8. Existing `_hint` fields are neither merged nor overwritten. A comment belonging to `name_hint` generates `name_hint_hint`.
@@ -281,7 +281,7 @@ Backtick-delimited raw strings are a project extension with deliberately simple 
 - They can be used only as values, not as object keys.
 - Content is read from the opening backtick through the **first** subsequent backtick; a backtick cannot be represented in the content.
 - There are no escape semantics. `\n`, `A`, and `\\` are all ordinary byte sequences.
-- Actual LF, CR, CRLF, NUL, other control bytes, and even invalid UTF-8 may appear in raw content and are preserved byte for byte.
+- Actual LF, CR, CRLF, NUL and other control bytes, and even invalid UTF-8 may appear in raw content and are preserved byte for byte.
 - LF, CR, and CRLF affect line and column positions in subsequent parse errors. CRLF counts as one newline, and a lone CR also counts as a newline.
 - When converting to strict JSON, raw content must be valid UTF-8 or conversion fails. Control characters and backslashes are escaped according to JSON rules.
 
@@ -302,7 +302,7 @@ When this information must be preserved, use a parser that supports ordered memb
 - `INPUT` and `OUTPUT` cannot refer to the same path. File identity checks also reject hard links and symbolic links that point to the same file.
 - An existing `OUTPUT` must be a regular file. Directories, symbolic links, and other non-regular files are rejected without modifying their targets.
 - The parent directory for a new output must already exist.
-- The tool first creates a `.json-convert-*` temporary file in the output directory, writes and synchronizes it completely, and then renames it atomically, preventing exposure of a partially written output file.
+- The tool first creates a `.json-convert-*` temporary file in the output directory, writes it completely, syncs it to disk, and then atomically renames it, preventing exposure of a partially written output file.
 - If conversion fails during reading, parsing, or generation, an existing output is not modified.
 - On platforms that cannot directly replace an existing file, the tool creates a `.json-convert-backup-*` backup in the same output directory before replacing the output. If replacement fails, it attempts to restore the old file.
 - If replacement and restoration both fail, the error reports the retained backup path. Restore manually from that `.json-convert-backup-*` file; do not delete it before confirming the data is safe.
@@ -322,7 +322,7 @@ When this information must be preserved, use a parser that supports ordered memb
 | `invalid UTF-8 in string` | A raw string contains invalid UTF-8 and cannot be written as strict JSON. | Convert the content to valid UTF-8 first. |
 | `refuse to replace non-regular output` | The output is a directory, symbolic link, or other special file. | Use a nonexistent path or a regular file. |
 | `read input` / `write output` | The input is unreadable, or the output directory does not exist or is not writable. | Check the paths, parent directory, and file permissions. |
-| Option placed after `INPUT` has no effect | Go `flag` stops parsing at the first positional argument. | Move all options before `INPUT OUTPUT`. |
+| An option placed after `INPUT` has no effect | Go `flag` stops parsing at the first positional argument. | Move all options before `INPUT OUTPUT`. |
 
 ## PowerShell and Git Bash Examples
 
