@@ -1,13 +1,15 @@
-# json-convert 中文参考手册
+# json-convert Reference Manual
 
-`json-convert` 在文件之间双向转换严格 JSON 与本项目支持的 JSON5 子集，也可以从 JSON5 推导 Go 对象定义文件。转换器使用有序语法树，因此可以保留对象成员顺序、重复键和数字原文；从 JSON5 转为 JSON 时，还可以把对象成员的关联注释转换为 `<字段名>_hint` 字段。
+English | [中文](README_zh.md)
+
+`json-convert` performs bidirectional file-to-file conversion between strict JSON and the JSON5 subset supported by this project. It can also derive a Go struct definition file from JSON5. The converter uses an ordered syntax tree, so it preserves object member order, duplicate keys, and original number text. When converting JSON5 to JSON, it can also convert comments associated with object members into `<field-name>_hint` fields.
 
 > [!IMPORTANT]
-> 本工具生成和接受的反引号原始字符串是项目扩展，**不是标准 JSON5 语法**。输出给其他 JSON5 实现前，请先确认对方支持反引号字符串；否则应使用 `--out json` 生成严格 JSON。
+> The backtick-delimited raw strings generated and accepted by this tool are a project extension and are **not standard JSON5 syntax**. Before sending output to another JSON5 implementation, confirm that it supports backtick strings; otherwise, use `--out json` to generate strict JSON.
 
-## 快速开始
+## Quick Start
 
-在 Windows 的 PowerShell 或 Git Bash 中，从仓库根目录运行以下 4 条命令：
+On Windows, run these four commands from the repository root in PowerShell or Git Bash:
 
 ```bash
 go build -o json-convert.exe ./cmd/json-convert
@@ -16,87 +18,87 @@ go build -o json-convert.exe ./cmd/json-convert
 ./json-convert.exe --out golang config.json5 config.go
 ```
 
-第一条命令构建 Windows 可执行文件；后 3 条命令分别执行 JSON → JSON5、JSON5 → JSON 和 JSON5 → Go 定义转换。Linux/macOS 请将输出文件名改为 `json-convert`，并使用 `./json-convert` 执行。
+The first command builds the Windows executable. The remaining three commands perform JSON → JSON5, JSON5 → JSON, and conversion to Go struct definitions, respectively. On Linux/macOS, change the output filename to `json-convert` and run it as `./json-convert`.
 
-## 命令语法与参数
+## Command Syntax and Options
 
 ```text
 json-convert --out json|json5|golang [--indent 0..8] INPUT [OUTPUT]
 ```
 
-| 参数 | 必填 | 默认值 | 说明 |
+| Option | Required | Default | Description |
 | --- | --- | --- | --- |
-| `--out json` 或 `--out=json` | 是（三选一） | 无 | 将 JSON5 输入转换为严格 JSON。 |
-| `--out json5` 或 `--out=json5` | 是（三选一） | 无 | 将严格 JSON 输入转换为本项目的 JSON5 格式。 |
-| `--out golang` 或 `--out=golang` | 是（三选一） | 无 | 将 JSON5 输入转换为 Go 对象定义文件。 |
-| `--indent N` 或 `--indent=N` | 否 | `2` | 每层缩进的空格数。`N` 必须是 `0`～`8` 的整数；`0` 表示紧凑输出。生成 Go 文件时该参数会被忽略。 |
-| `INPUT` | 是 | 无 | 输入文件路径。 |
-| `OUTPUT` | 否 | 自动推导 | 输出文件路径。省略或显式传空时，会自动生成 `<输入名>_convert` 加目标扩展名的文件。 |
+| `--out json` or `--out=json` | Yes (choose one of three) | None | Converts JSON5 input to strict JSON. |
+| `--out json5` or `--out=json5` | Yes (choose one of three) | None | Converts strict JSON input to this project's JSON5 format. |
+| `--out golang` or `--out=golang` | Yes (choose one of three) | None | Converts JSON5 input to a Go struct definition file. |
+| `--indent N` or `--indent=N` | No | `2` | Number of spaces per indentation level. `N` must be an integer from `0` to `8`; `0` produces compact output. This option is ignored when generating Go files. |
+| `INPUT` | Yes | None | Input file path. |
+| `OUTPUT` | No | Derived automatically | Output file path. If omitted or explicitly passed as empty, the tool generates a filename consisting of `<input-name>_convert` plus the target extension. |
 
-位置参数可以是 1 个或 2 个，即 `INPUT`，以及可选的 `OUTPUT`。当 `OUTPUT` 为空时：
+There may be one or two positional arguments: `INPUT` and the optional `OUTPUT`. When `OUTPUT` is empty:
 
-- `--out json` 生成 `<输入名>_convert.json`；
-- `--out json5` 生成 `<输入名>_convert.json5`；
-- `--out golang` 生成 `<输入名>_convert.go`。
+- `--out json` generates `<input-name>_convert.json`;
+- `--out json5` generates `<input-name>_convert.json5`;
+- `--out golang` generates `<input-name>_convert.go`.
 
-选项必须写在位置参数之前；底层使用 Go `flag` 解析，遇到第一个位置参数后不再解析后续选项。
+Options must precede positional arguments. The underlying Go `flag` parser stops parsing options after the first positional argument.
 
-## 进程行为
+## Process Behavior
 
-| 退出码 | 含义 | 输出位置 |
+| Exit Code | Meaning | Output Location |
 | --- | --- | --- |
-| `0` | 转换成功 | `stdout` 和 `stderr` 均为空。 |
-| `1` | 读取、解析、转换或写入失败 | 错误写入 `stderr`。 |
-| `2` | 命令行参数错误 | 用法和错误写入 `stderr`。 |
+| `0` | Conversion succeeded | Both `stdout` and `stderr` are empty. |
+| `1` | Reading, parsing, conversion, or writing failed | The error is written to `stderr`. |
+| `2` | Invalid command-line arguments | Usage information and the error are written to `stderr`. |
 
-工具不把转换结果写入 `stdout`，只写入指定的 `OUTPUT` 文件。所有成功输出均以**恰好一个 LF 字节**（`0x0A`）结束，包括 Windows；不会改为 CRLF。
+The tool never writes conversion results to `stdout`; it writes only to the specified `OUTPUT` file. Every successful output ends with **exactly one LF byte** (`0x0A`), including on Windows; it is not converted to CRLF.
 
 ## JSON → JSON5
 
-使用 `--out json5` 时，输入按严格 JSON 解析。
+With `--out json5`, the input is parsed as strict JSON.
 
-### 严格 JSON 输入规则
+### Strict JSON Input Rules
 
-支持：
+Supported:
 
-- `null`、`true`、`false`；
-- 双引号字符串及标准 JSON 转义，包括 Unicode 代理对；
-- 数组和对象；对象键必须使用双引号；
-- 标准十进制数与指数，例如 `-0`、`1.0`、`1E+2`；
-- 空格、Tab、LF 和 CR 空白。
+- `null`, `true`, and `false`;
+- double-quoted strings and standard JSON escapes, including Unicode surrogate pairs;
+- arrays and objects; object keys must be double-quoted;
+- standard decimal numbers and exponents, such as `-0`, `1.0`, and `1E+2`;
+- space, tab, LF, and CR whitespace.
 
-拒绝：
+Rejected:
 
-- 注释、未加引号的键、单引号字符串和反引号字符串；
-- 数组或对象的尾随逗号；
-- `+1`、`.5`、`1.`、十六进制数、`Infinity`、`NaN`；
-- 前导零（如 `01`）、非法转义、未转义控制字符、无效 UTF-8 和未配对代理项；
-- Form Feed（换页符）空白和根值后的额外内容。
+- comments, unquoted keys, single-quoted strings, and backtick strings;
+- trailing commas in arrays or objects;
+- `+1`, `.5`, `1.`, hexadecimal numbers, `Infinity`, and `NaN`;
+- leading zeros (such as `01`), invalid escapes, unescaped control characters, invalid UTF-8, and unpaired surrogates;
+- form feed whitespace and extra content after the root value.
 
-对象成员按输入顺序输出，重复键不会合并。数字不经过浮点解析，原始文本会保留，例如 `1.2300`、`1E+6` 和任意长度整数保持不变。
+Object members are emitted in input order, and duplicate keys are not merged. Numbers are not parsed as floating point, so their original text is preserved; for example, `1.2300`, `1E+6`, and integers of arbitrary length remain unchanged.
 
-### 字符串输出策略
+### String Output Strategy
 
-- 对象键始终使用标准 JSON 双引号。
-- 字符串值不含反引号时，使用反引号原始字符串。解码后的换行、引号、反斜杠和控制字节直接位于反引号之间。
-- 字符串值含反引号时，回退为标准 JSON 双引号字符串，并按 JSON 规则转义。
-- 回退字符串必须是有效 UTF-8；严格 JSON 输入已保证这一点。
+- Object keys always use standard JSON double quotes.
+- A string value that contains no backtick uses a backtick-delimited raw string. Decoded newlines, quotes, backslashes, and control bytes appear directly between the backticks.
+- A string value containing a backtick falls back to a standard JSON double-quoted string and is escaped according to JSON rules.
+- A fallback string must be valid UTF-8; strict JSON input already guarantees this.
 
-### 完整示例
+### Complete Example
 
-`input.json`：
+`input.json`:
 
 ```json
 {"z":"line\n\"quoted\"","tick":"has ` mark","z":1.2300,"huge":123456789012345678901234567890}
 ```
 
-运行：
+Run:
 
 ```bash
 go run ./cmd/json-convert --out json5 --indent 2 input.json output.json5
 ```
 
-`output.json5` 的实际字节内容如下。第一个 `z` 值中包含真实 LF，不是字符序列 `\n`：
+The actual byte content of `output.json5` is shown below. The first `z` value contains an actual LF, not the character sequence `\n`:
 
 ```text
 {
@@ -108,15 +110,15 @@ go run ./cmd/json-convert --out json5 --indent 2 input.json output.json5
 }
 ```
 
-### 紧凑输出示例
+### Compact Output Example
 
-将严格 JSON 转为不带排版空白的 JSON5：
+Convert strict JSON to JSON5 without formatting whitespace:
 
 ```bash
 ./json-convert.exe --out json5 --indent 0 input.json compact.json5
 ```
 
-例如，输入 `{"name":"demo","enabled":true}` 时，`compact.json5` 为：
+For example, when the input is `{"name":"demo","enabled":true}`, `compact.json5` contains:
 
 ```text
 {"name":`demo`,"enabled":true}
@@ -124,48 +126,48 @@ go run ./cmd/json-convert --out json5 --indent 2 input.json output.json5
 
 ## JSON5 → JSON
 
-使用 `--out json` 时，输入按本项目支持的 JSON5 子集解析，输出由严格 JSON writer 生成。
+With `--out json`, the input is parsed as the JSON5 subset supported by this project, and the output is generated by a strict JSON writer.
 
-### 支持的 JSON5 输入
+### Supported JSON5 Input
 
-- `//` 行注释和 `/* ... */` 块注释；
-- 双引号、单引号字符串，以及项目扩展的反引号原始字符串；
-- 双引号键、单引号键，或由 ASCII 字母、`_`、`$` 开头且后续可含数字的未引号键；
-- 数组和对象尾随逗号；
-- JSON5 数字形式：十六进制、前导 `+`、前导小数点、尾随小数点、`Infinity` 和 `NaN`；
-- 双引号或单引号字符串中的 LF、CR 或 CRLF 反斜杠续行；
-- 空格、Tab、LF、CR 和 Form Feed 空白。
+- `//` line comments and `/* ... */` block comments;
+- double-quoted and single-quoted strings, plus the project's backtick-delimited raw string extension;
+- double-quoted keys, single-quoted keys, or unquoted keys that begin with an ASCII letter, `_`, or `$` and may be followed by ASCII letters, digits, underscores, or dollar signs;
+- trailing commas in arrays and objects;
+- JSON5 number forms: hexadecimal, leading `+`, leading decimal point, trailing decimal point, `Infinity`, and `NaN`;
+- LF, CR, or CRLF backslash continuations in double-quoted or single-quoted strings;
+- space, tab, LF, CR, and form feed whitespace.
 
-### 明确拒绝的输入
+### Explicitly Rejected Input
 
-- 以数字开头、含连字符或含非 ASCII 字母的未引号键，例如 `9abc`、`a-b`、`é`；
-- 反引号对象键；
-- 前导零十进制数，例如 `01`；
-- 不完整数字、非法标识符后缀、非法转义、未终止字符串或注释；
-- 单引号或双引号字符串中的未转义换行、控制字符或无效 UTF-8；
-- 根值后的额外内容。
+- unquoted keys that begin with a digit, contain a hyphen, or contain non-ASCII letters, such as `9abc`, `a-b`, and `é`;
+- backtick-delimited object keys;
+- decimal numbers with leading zeros, such as `01`;
+- incomplete numbers, invalid identifier suffixes, invalid escapes, and unterminated strings or comments;
+- unescaped newlines, control characters, or invalid UTF-8 in single-quoted or double-quoted strings;
+- extra content after the root value.
 
-### 严格 JSON 输出与数字转换
+### Strict JSON Output and Number Conversion
 
-输出对象键和值字符串都使用标准 JSON 双引号及转义。成员顺序和重复键仍然保留。
+Both object keys and string values in the output use standard JSON double quotes and escapes. Member order and duplicate keys are preserved.
 
-数字转换不经过 `float64`，因此不会因浮点精度丢失：
+Numbers are not converted through `float64`, so floating-point precision is not lost:
 
-| JSON5 输入 | JSON 输出 | 规则 |
+| JSON5 Input | JSON Output | Rule |
 | --- | --- | --- |
-| `0xFF`、`+0Xff` | `255` | 十六进制使用任意精度整数转换。 |
-| `-0xFF` | `-255` | 保留负号。 |
-| `+12` | `12` | 删除前导 `+`。 |
-| `.5`、`+.5`、`-.5` | `0.5`、`0.5`、`-0.5` | 补齐整数位。 |
-| `1.`、`1.e2` | `1.0`、`1.0e2` | 补齐小数位。 |
-| `1.2300`、`1E+6` | 原样 | 已是合法 JSON 数字时保留原文。 |
-| `Infinity`、`+Infinity`、`-Infinity`、`NaN` | 转换失败 | 非有限数不是合法 JSON。 |
+| `0xFF`, `+0Xff` | `255` | Hexadecimal values are converted using arbitrary-precision integer arithmetic. |
+| `-0xFF` | `-255` | The minus sign is preserved. |
+| `+12` | `12` | The leading `+` is removed. |
+| `.5`, `+.5`, `-.5` | `0.5`, `0.5`, `-0.5` | The integer part is added. |
+| `1.`, `1.e2` | `1.0`, `1.0e2` | The fractional part is added. |
+| `1.2300`, `1E+6` | Unchanged | Original text is preserved when it is already a valid JSON number. |
+| `Infinity`, `+Infinity`, `-Infinity`, `NaN` | Conversion fails | Non-finite numbers are not valid JSON. |
 
-十进制数字和指数原文不会被求值；超长十六进制整数通过任意精度整数转换。`-0x0` 输出为 `-0`。
+Decimal number and exponent text is not evaluated. Arbitrarily long hexadecimal integers are converted using arbitrary-precision integer arithmetic. `-0x0` is emitted as `-0`.
 
-### 注释与数字完整示例
+### Complete Comment and Number Example
 
-`input.json5`：
+`input.json5`:
 
 ```javascript
 {
@@ -179,13 +181,13 @@ go run ./cmd/json-convert --out json5 --indent 2 input.json output.json5
 }
 ```
 
-运行：
+Run:
 
 ```bash
 go run ./cmd/json-convert --out json --indent 2 input.json5 output.json
 ```
 
-`output.json`：
+`output.json`:
 
 ```json
 {
@@ -200,32 +202,119 @@ go run ./cmd/json-convert --out json --indent 2 input.json5 output.json
 }
 ```
 
-这里输入 raw 值中的 `\n` 是反斜杠和字母 `n` 两个普通字节，所以严格 JSON 输出需把反斜杠写成 `\\`。
+Here, `\n` in the input `raw` value consists of two ordinary bytes—a backslash and the letter `n`—so the strict JSON output must write the backslash as `\\`.
 
-## 注释转换为 `_hint`
+## JSON5 → Go Struct Definitions
 
-只有从 JSON5 转为 JSON 时才处理注释。规则如下：
+Use `--out golang` to parse the input as the supported JSON5 subset and generate a `gofmt`-formatted Go source file. `--indent` has no effect in this mode. With two file paths, the second path is the explicit output; with only `INPUT`, the output is written beside the input as `<input-name>_convert.go`.
 
-1. 只为**对象成员**生成提示。关联注释合并为字符串，并在原成员前插入 `<原键>_hint`。
-2. 同一成员有多条关联注释时，按出现顺序清理后用 LF 连接。
-3. 成员值结束后、同一行上的注释归属该成员；逗号后仍在同一行的注释也归属前一成员。
-4. 位于新行、下一成员之前的注释归属下一成员。
-5. 多行对象或数组值闭合后，同一行的注释归属该对象成员。
-6. 顶层注释、数组元素注释、文档尾注释，以及对象最后一个成员后另起一行的对象尾注释会被删除，不生成提示。
-7. 空注释清理后为空，不生成提示。
-8. 现有 `_hint` 字段不合并、不覆盖。注释属于 `name_hint` 时会生成 `name_hint_hint`。
-9. 重复键分别处理，可能产生重复的 `_hint` 键；顺序保持不变。
-10. 处理会递归进入嵌套对象，包括数组中的对象。
+The package name comes from the output directory name, cleaned into lower camel-case identifier form. This cleanup does not avoid Go keywords: an output directory named `type`, `package`, or another keyword causes `gofmt` to fail. Choose a non-keyword directory name, or explicitly place the output in a suitable directory; the package name is always inferred from the output directory. The root type name comes from the **input filename**, without its final extension, converted to an exported Go identifier. Therefore, `example/config.json5` → `example/generated.go` produces `package example` and `type Config`; changing only the output filename does not change `Config`. If an identifier has no usable letters or digits, the fallbacks are `main` for the package and `Root` for a type. A leading digit is prefixed with `x` or `X`.
 
-注释清理会：
+### Structure, Names, Types, and Comments
 
-- 删除 `//`、`/*`、`*/` 标记并去除首尾空白；
-- 将 CRLF 和 CR 统一为 LF；
-- 去掉块注释公共缩进；
-- 去掉常见的每行前导 `*` 和其后的一个空格；
-- 保留注释内部空行和相对缩进。
+- A root object becomes a named struct. Nested objects become additional named structs, and arrays become slices. A root array or scalar becomes a named type whose underlying type is the inferred slice or scalar type.
+- Object keys are split at punctuation and converted to exported field names. The exact original key is normally retained in a raw `json:"..."` struct tag. A key containing a backtick cannot be represented in that raw tag and causes `gofmt` to fail; rename such keys before conversion or do not use `--out golang`. Field-name collisions receive numeric suffixes such as `DisplayName2`; colliding generated type names are resolved the same way.
+- Booleans, strings, integers, and non-integer numbers map to `bool`, `string`, `int64`, and `float64`. Hexadecimal integer tokens are also inferred as `int64`. `null`, empty-array elements, incompatible mixed values, and otherwise unknown values map to `any`.
+- Array element schemas are merged across all elements. Integer and floating-point values merge to `float64`; object elements merge their fields recursively; incompatible kinds merge to `any`. Missing object fields are still emitted as ordinary fields—generation does not add pointers or `omitempty`.
+- Leading and same-line trailing comments associated with an object member are cleaned and emitted as `//` comments above the Go field. This mode does **not** create `_hint` fields. Existing keys ending in `_hint` are ordinary fields and are treated like any other key.
+- Duplicate object keys are merged into one field schema. An empty object produces an empty named struct, and an empty array produces `[]any`. A non-object root (array, string, number, boolean, or `null`) produces a named type declaration rather than a struct root.
 
-完整示例：
+### Complete Example
+
+`example/config.json5`:
+
+```javascript
+{
+  // 服务配置
+  service: {
+    // 监听地址
+    host_name: 'localhost',
+    ports: [80, 443],
+  },
+  users: [
+    {user_id: 1, enabled: true, score: 1},
+    {user_id: 2, enabled: false, score: 2.5},
+  ],
+  'display-name': 'demo',
+  display_name: 'fallback',
+  optional: null,
+  empty: {},
+  flags: [],
+}
+```
+
+Run with an explicit output path:
+
+```bash
+go run ./cmd/json-convert --out golang example/config.json5 example/generated.go
+```
+
+The generated `example/generated.go` is:
+
+```go
+// Code generated by json-convert. DO NOT EDIT.
+
+package example
+
+type Config struct {
+	// 服务配置
+	Service      ConfigService     `json:"service"`
+	Users        []ConfigUsersItem `json:"users"`
+	DisplayName  string            `json:"display-name"`
+	DisplayName2 string            `json:"display_name"`
+	Optional     any               `json:"optional"`
+	Empty        ConfigEmpty       `json:"empty"`
+	Flags        []any             `json:"flags"`
+}
+
+type ConfigService struct {
+	// 监听地址
+	HostName string  `json:"host_name"`
+	Ports    []int64 `json:"ports"`
+}
+
+type ConfigUsersItem struct {
+	UserId  int64   `json:"user_id"`
+	Enabled bool    `json:"enabled"`
+	Score   float64 `json:"score"`
+}
+
+type ConfigEmpty struct {
+}
+```
+
+Omit the second path to generate `example/config_convert.go` instead:
+
+```bash
+go run ./cmd/json-convert --out golang example/config.json5
+```
+
+The automatic and explicit commands generate identical Go source for this example because package and root type inference use the output directory and input filename, respectively.
+
+## Converting Comments to `_hint`
+
+Comments are processed only when converting JSON5 to JSON. The rules are:
+
+1. Hints are generated only for **object members**. Associated comments are combined into a string, and a `<original-key>_hint` member is inserted before the original member.
+2. When multiple comments are associated with the same member, they are cleaned in order of appearance and joined with LF.
+3. A comment on the same line after a member value belongs to that member. A comment after the comma on the same line also belongs to the preceding member.
+4. A comment on a new line before the next member belongs to the next member.
+5. A comment on the same line after the closing delimiter of a multiline object or array value belongs to that object member.
+6. Top-level comments, array-element comments, trailing document comments, and object-tail comments on a new line after the object's last member are removed without generating hints.
+7. An empty comment that remains empty after cleaning does not generate a hint.
+8. Existing `_hint` fields are neither merged nor overwritten. A comment belonging to `name_hint` generates `name_hint_hint`.
+9. Duplicate keys are processed separately and may produce duplicate `_hint` keys; order remains unchanged.
+10. Processing recurses into nested objects, including objects inside arrays.
+
+Comment cleaning:
+
+- removes the `//`, `/*`, and `*/` markers and trims surrounding whitespace;
+- normalizes CRLF and CR to LF;
+- removes common indentation from block comments;
+- removes the customary leading `*` and one following space from each line;
+- preserves blank lines and relative indentation within comments.
+
+Complete example:
 
 ```javascript
 {
@@ -247,7 +336,7 @@ go run ./cmd/json-convert --out json --indent 2 input.json5 output.json
 }
 ```
 
-转换结果：
+Conversion result:
 
 ```json
 {
@@ -272,57 +361,59 @@ go run ./cmd/json-convert --out json --indent 2 input.json5 output.json
 }
 ```
 
-## 反引号 raw 字符串注意事项
+## Backtick Raw String Notes
 
-反引号 raw 字符串是项目扩展，规则刻意简单：
+Backtick-delimited raw strings are a project extension with deliberately simple rules:
 
-- 只能作为值，不能作为对象键。
-- 从开头反引号后读取到**第一个**反引号即终止；无法在内容中表示反引号。
-- 没有任何转义语义。`\n`、`A` 和 `\\` 都只是普通字节序列。
-- 实际 LF、CR、CRLF、NUL、其他控制字节乃至无效 UTF-8 都可位于 raw 内容中，并按原字节保留。
-- LF、CR 和 CRLF 会影响后续解析错误的行列位置；CRLF 计为一次换行，单独 CR 也计为换行。
-- 转为严格 JSON 时，raw 内容必须是有效 UTF-8，否则失败；控制字符和反斜杠会按 JSON 规则转义。
+- They can be used only as values, not as object keys.
+- Content is read from the opening backtick through the **first** subsequent backtick; a backtick cannot be represented in the content.
+- There are no escape semantics. `\n`, `A`, and `\\` are all ordinary byte sequences.
+- Actual LF, CR, CRLF, NUL and other control bytes, and even invalid UTF-8 may appear in raw content and are preserved byte for byte.
+- LF, CR, and CRLF affect line and column positions in subsequent parse errors. CRLF counts as one newline, and a lone CR also counts as a newline.
+- When converting to strict JSON, raw content must be valid UTF-8 or conversion fails. Control characters and backslashes are escaped according to JSON rules.
 
-因此，raw 适合承载原样多行文本或字节，但不适合包含反引号的数据。JSON → JSON5 遇到反引号内容时会自动回退到双引号字符串。
+Raw strings are therefore suitable for verbatim multiline text or bytes, but not for data containing backticks. When JSON → JSON5 conversion encounters content with a backtick, it automatically falls back to a double-quoted string.
 
-## 顺序、重复键与下游风险
+## Order, Duplicate Keys, and Downstream Risks
 
-本工具保留对象成员顺序和重复键。例如 `{"x":1,"x":2}` 转换后仍有两个 `x`。这对无损文本转换很重要，但许多下游库会把对象解码到 `map`：
+This tool preserves object member order and duplicate keys. For example, `{"x":1,"x":2}` still contains two `x` members after conversion. This is important for lossless text conversion, but many downstream libraries decode objects into a `map`:
 
-- 成员顺序通常丢失；
-- 重复键通常只保留最后一个，也可能被拒绝；
-- 自动生成的重复 `_hint` 键也面临相同问题。
+- member order is usually lost;
+- only the last duplicate key is usually retained, or duplicates may be rejected;
+- automatically generated duplicate `_hint` keys face the same issue.
 
-需要保留这些信息时，请使用支持有序成员和重复键的解析器，不要直接解码到普通 `map`。
+When this information must be preserved, use a parser that supports ordered members and duplicate keys instead of decoding directly into an ordinary `map`.
 
-## 文件安全
+## File Safety
 
-- `INPUT` 与 `OUTPUT` 不能是同一路径。工具也会通过文件身份检测拒绝指向同一文件的硬链接和符号链接。
-- 已存在的 `OUTPUT` 必须是普通文件。目录、符号链接及其他非普通文件会被拒绝，且不会修改其目标。
-- 新输出的父目录必须已经存在。
-- 工具先在输出目录创建 `.json-convert-*` 临时文件，完整写入并同步后再原子重命名，避免把半写文件暴露为输出。
-- 转换在读取、解析或生成阶段失败时，不会改动现有输出。
-- 某些平台不能直接覆盖现有文件时，工具会在同一输出目录使用 `.json-convert-backup-*` 备份，再替换输出；替换失败会尝试恢复旧文件。
-- 如果替换和恢复同时失败，错误信息会报告保留的备份路径。请从该 `.json-convert-backup-*` 文件人工恢复；不要在确认数据前删除它。
+- `INPUT` and `OUTPUT` cannot refer to the same path. File identity checks also reject hard links and symbolic links that point to the same file.
+- An existing `OUTPUT` must be a regular file. Directories, symbolic links, and other non-regular files are rejected without modifying their targets.
+- The parent directory for a new output must already exist.
+- The tool first creates a `.json-convert-*` temporary file in the output directory, writes it completely, syncs it to disk, and then atomically renames it, preventing exposure of a partially written output file.
+- If conversion fails during reading, parsing, or generation, an existing output is not modified.
+- On platforms that cannot directly replace an existing file, the tool creates a `.json-convert-backup-*` backup in the same output directory before replacing the output. If replacement fails, it attempts to restore the old file.
+- If replacement and restoration both fail, the error reports the retained backup path. Restore manually from that `.json-convert-backup-*` file; do not delete it before confirming the data is safe.
 
-## 常见错误
+## Common Errors
 
-| 现象或错误 | 原因 | 处理方法 |
+| Symptom or Error | Cause | Resolution |
 | --- | --- | --- |
-| `--out must be json or json5` | 未传 `--out` 或值不受支持。 | 指定 `--out json` 或 `--out json5`。 |
-| `--indent must be an integer from 0 to 8` | 缩进超出范围。 | 使用 `0`～`8`。非整数会由参数解析器直接报错。 |
-| `expected exactly two file paths` | `INPUT`、`OUTPUT` 缺失或有多余位置参数。 | 只保留恰好两个文件路径。 |
-| `input and output are the same file` | 路径相同，或路径通过硬链接/符号链接指向同一文件。 | 使用不同的输出文件。 |
-| `line N, column M: ...` | 输入语法错误。 | 按所示行列检查输入；注意 raw 中的 CR/LF 会影响行号。 |
-| `unterminated raw string` | raw 字符串缺少结束反引号。 | 在 raw 内容末尾添加反引号；内容本身不能包含反引号。 |
-| `parse input ...`（`--out json5`） | `--out json5` 的输入必须是严格 JSON，但输入含注释、单引号字符串、未加引号的键、尾随逗号等 JSON5 语法。 | 将输入改为严格 JSON；如果输入本来是 JSON5 并要转成 JSON，请改用 `--out json`。 |
-| `non-finite number ... is not valid JSON` | 尝试把 `Infinity` 或 `NaN` 写成严格 JSON。 | 改为有限数，或保留为字符串。 |
-| `invalid UTF-8 in string` | raw 字符串包含无效 UTF-8，无法写为严格 JSON。 | 先将内容转成有效 UTF-8。 |
-| `refuse to replace non-regular output` | 输出是目录、符号链接或其他特殊文件。 | 改用不存在的路径或普通文件。 |
-| `read input` / `write output` | 输入不可读，或输出目录不存在、无权限。 | 检查路径、父目录和文件权限。 |
-| 参数放在 `INPUT` 后未生效 | Go `flag` 在第一个位置参数处停止解析。 | 把全部选项移到 `INPUT OUTPUT` 之前。 |
+| `--out must be json, json5, or golang` | `--out` was omitted or has an unsupported value. | Specify `--out json`, `--out json5`, or `--out golang`. |
+| `--indent must be an integer from 0 to 8` | Indentation is outside the allowed range. | Use `0` through `8`. Non-integers are reported directly by the option parser. |
+| `expected one or two file paths` | No input path was supplied, or more than two positional arguments were supplied. | Pass one path for automatic output naming or two paths for an explicit output. |
+| `input and output are the same file` | The paths are identical or refer to the same file through a hard link or symbolic link. | Use a different output file. |
+| `line N, column M: ...` | The input has a syntax error. | Inspect the input at the reported line and column; note that CR/LF in raw strings affects line numbers. |
+| `unterminated raw string` | A raw string has no closing backtick. | Add a backtick at the end of the raw content; the content itself cannot contain backticks. |
+| `parse input ...` (`--out json5`) | Input to `--out json5` must be strict JSON, but it contains JSON5 syntax such as comments, single-quoted strings, unquoted keys, or trailing commas. | Convert the input to strict JSON. If the input is JSON5 and should become JSON, use `--out json` instead. |
+| `non-finite number ... is not valid JSON` | An attempt was made to write `Infinity` or `NaN` as strict JSON. | Replace it with a finite number or preserve it as a string. |
+| `invalid UTF-8 in string` | A raw string contains invalid UTF-8 and cannot be written as strict JSON. | Convert the content to valid UTF-8 first. |
+| `format Go output: ... expected IDENT, found ...` with a keyword such as `package` | `--out golang` inferred a Go keyword as the package name from the output directory. | Choose a non-keyword output directory, or explicitly place the output in a suitable directory. |
+| `format Go output: ...` for an input key containing a backtick | A backtick cannot be represented inside the raw struct tag generated for the JSON key. | Rename the key before conversion or do not use `--out golang`. |
+| `refuse to replace non-regular output` | The output is a directory, symbolic link, or other special file. | Use a nonexistent path or a regular file. |
+| `read input` / `write output` | The input is unreadable, or the output directory does not exist or is not writable. | Check the paths, parent directory, and file permissions. |
+| An option placed after `INPUT` has no effect | Go `flag` stops parsing at the first positional argument. | Move all options before `INPUT OUTPUT`. |
 
-## PowerShell 与 Git Bash 示例
+## PowerShell and Git Bash Examples
 
 ### PowerShell
 
@@ -352,19 +443,20 @@ $LASTEXITCODE
 printf 'exit=%s\n' "$?"
 ```
 
-## 能力限制速查
+## Capability Summary
 
-| 能力 | 状态 |
+| Capability | Status |
 | --- | --- |
-| 文件到文件转换 | 支持。 |
-| 从 `stdin` 读取或向 `stdout` 输出数据 | 不支持；`-` 也只会被当作普通文件名。 |
-| 原地覆盖输入 | 不支持，包括相同文件的硬链接和符号链接。 |
-| 保留对象成员顺序、重复键 | 支持。 |
-| 保留数字原文 | JSON → JSON5 支持；JSON5 → JSON 对合法 JSON 数字保留原文，其他形式按规则规范化。 |
-| 保留原始缩进、空格、换行风格、引号样式 | 不支持；输出会按 `--indent` 重新排版。 |
-| 原样保留注释 | 不支持；JSON5 → JSON 仅将可关联对象成员的注释转换为 `_hint`，其余删除。 |
-| 标准 JSON5 全语法兼容 | 不支持；未引号键仅限 ASCII 子集，反引号字符串则是非标准扩展。 |
-| 输出 `Infinity` / `NaN` 到严格 JSON | 不支持。 |
-| 在 raw 字符串中转义反引号 | 不支持；第一个反引号总是终止字符串。 |
-| 自动创建输出目录 | 不支持。 |
-| JSON Schema 校验、键去重、语义合并 | 不支持。 |
+| File-to-file conversion | Supported. |
+| Generating Go struct definitions from JSON5 | Supported with `--out golang`; package and root type names are inferred from the output directory and input filename. Go-keyword package names and keys containing backticks are not supported. |
+| Reading from `stdin` or writing data to `stdout` | Not supported; `-` is treated only as an ordinary filename. |
+| In-place input replacement | Not supported, including hard links and symbolic links to the same file. |
+| Preserving object member order and duplicate keys | Supported. |
+| Preserving original number text | Supported for JSON → JSON5; for JSON5 → JSON, valid JSON number text is preserved and other forms are normalized according to the documented rules. |
+| Preserving original indentation, spaces, newline style, and quote style | Not supported; output is reformatted according to `--indent`. |
+| Preserving comments verbatim | Not supported; JSON5 → JSON converts only comments associated with object members into `_hint` fields and removes the rest. |
+| Full standard JSON5 syntax compatibility | Not supported; unquoted keys are limited to an ASCII subset, while backtick strings are a nonstandard extension. |
+| Writing `Infinity` / `NaN` to strict JSON | Not supported. |
+| Escaping backticks in raw strings | Not supported; the first backtick always terminates the string. |
+| Creating output directories automatically | Not supported. |
+| JSON Schema validation, key deduplication, or semantic merging | Not supported. |
