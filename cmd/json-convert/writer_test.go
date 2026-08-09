@@ -231,7 +231,7 @@ func TestWriteJSONRejectsInvalidUTF8InStringsKeysAndHints(t *testing.T) {
 }
 
 func TestWriteJSONUsesStandardQuotingPreservesDuplicateKeysAndSupportsIndent(t *testing.T) {
-	value, err := parseDocument([]byte(`{"x":"line\n\"quoted\"\\slash\t","x":" "}`), modeJSON)
+	value, err := parseDocument([]byte(`{"x":"line\n\"quoted\"\\slash\t","x":""}`), modeJSON)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,8 +239,8 @@ func TestWriteJSONUsesStandardQuotingPreservesDuplicateKeysAndSupportsIndent(t *
 		indent int
 		want   string
 	}{
-		{0, "{\"x\":\"line\\n\\\"quoted\\\"\\\\slash\\t\",\"x\":\" \"}\n"},
-		{2, "{\n  \"x\": \"line\\n\\\"quoted\\\"\\\\slash\\t\",\n  \"x\": \" \"\n}\n"},
+		{0, "{\"x\":\"line\\n\\\"quoted\\\"\\\\slash\\t\",\"x\":\"\"}\n"},
+		{2, "{\n  \"x\": \"line\\n\\\"quoted\\\"\\\\slash\\t\",\n  \"x\": \"\"\n}\n"},
 	} {
 		got, err := writeDocument(value, outputJSON, tt.indent)
 		if err != nil {
