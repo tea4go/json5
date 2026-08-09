@@ -2,13 +2,16 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
+
+	pflag "github.com/spf13/pflag"
+	logs "github.com/tea4go/gh/log4go"
 )
 
 type options struct {
@@ -19,22 +22,35 @@ type options struct {
 }
 
 var (
-	renameFile = os.Rename
-	removeFile = os.Remove
+	renameFile           = os.Rename
+	removeFile           = os.Remove
+	loggerOnce           sync.Once
+	processLoggingEnable bool
 )
+
+func filepathJoin(elem ...string) string {
+	path := filepath.Join(elem...)
+	if runtime.GOOS == "windows" {
+		return strings.ReplaceAll(path, "\\", "/")
+	}
+	return path
+}
 
 func parseOptions(args []string, stderr io.Writer) (options, error) {
 	var opts options
 	var out string
-	flags := flag.NewFlagSet("json-convert", flag.ContinueOnError)
-	flags.SetOutput(stderr)
-	flags.StringVar(&out, "out", "", "output format: json, json5, or golang")
-	flags.IntVar(&opts.indent, "indent", 2, "indentation spaces (0..8)")
-	flags.Usage = func() {
+	pflag.CommandLine.SetOutput(stderr)
+	out = pflag.StringP("out", "", "output format: json, json5, or golang")
+	opts.indent = pflag.IntP("indent", 2, "indentation spaces (0..8)")
+	pflag.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: json-convert --out json|json5|golang [--indent 0..8] INPUT [OUTPUT]")
+		pflag.PrintDefaults()
 	}
-	if err := flags.Parse(args); err != nil {
-		flags.Usage()
+	if err := pflag.Parse(args); err != nil {
+		if errors.Is(err, pflag.ErrHelp) {
+			return options{}, err
+		}
+		pflag.Usage()
 		return options{}, err
 	}
 	switch out {
@@ -45,28 +61,39 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	case "golang":
 		opts.out = outputGolang
 	default:
-		flags.Usage()
+		pflag.Usage()
 		return options{}, fmt.Errorf("--out must be json, json5, or golang")
 	}
 	if opts.indent < 0 || opts.indent > 8 {
-		flags.Usage()
+		pflag.Usage()
 		return options{}, fmt.Errorf("--indent must be an integer from 0 to 8")
 	}
-	if flags.NArg() < 1 || flags.NArg() > 2 {
-		flags.Usage()
+	if pflag.NArg() < 1 || pflag.NArg() > 2 {
+		pflag.Usage()
 		return options{}, fmt.Errorf("expected one or two file paths")
 	}
-	opts.input = flags.Arg(0)
-	if flags.NArg() == 2 {
-		opts.output = flags.Arg(1)
+	opts.input = pflag.Arg(0)
+	if pflag.NArg() == 2 {
+		opts.output = pflag.Arg(1)
 	}
 	if opts.output == "" {
 		opts.output = defaultOutputPath(opts.input, opts.out)
 	}
+
+	log_name := os.Getenv("log_name")
+	if log_name == "" {
+		log_name = "json-convert"
+	}
+	// 标准程序块
+	logsFileName := filepathJoin(os.TempDir(), "ulog_"+log_name+".txt")
+	logs.SetLogger("file", `{"filename":"`+logsFileName+`", "perm": "0666","level":5}`)
+	logs.StartLogger()
+	// 标准程序块
 	return opts, nil
 }
 
 func convertFile(opts options) error {
+	logNotice("开始转换: out=%s input=%s output=%s indent=%d", outputModeName(opts.out), opts.input, opts.output, opts.indent)
 	same, err := sameFile(opts.input, opts.output)
 	if err != nil {
 		return err
@@ -79,21 +106,26 @@ func convertFile(opts options) error {
 	if err != nil {
 		return fmt.Errorf("read input %q: %w", opts.input, err)
 	}
+	logInfo("读取输入文件成功: %s (%d bytes)", opts.input, len(data))
 	mode := modeJSON
 	if opts.out == outputJSON || opts.out == outputGolang {
 		mode = modeJSON5
 	}
+	logInfo("解析输入模式: %s", parseModeName(mode))
 	value, err := parseDocument(data, mode)
 	if err != nil {
 		return fmt.Errorf("parse input %q: %w", opts.input, err)
 	}
+	logInfo("解析输入完成")
 	switch opts.out {
 	case outputJSON:
+		logInfo("附加注释 hint 字段")
 		value = addHintMembers(value)
 		data, err = writeDocument(value, opts.out, opts.indent)
 	case outputJSON5:
 		data, err = writeDocument(value, opts.out, opts.indent)
 	case outputGolang:
+		logInfo("生成 Go 对象定义")
 		data, err = generateGoDefinitions(value, goPackageName(opts.output), rootTypeName(opts.input))
 	default:
 		err = fmt.Errorf("unsupported output mode")
@@ -104,7 +136,32 @@ func convertFile(opts options) error {
 	if err := writeFileAtomic(opts.output, data); err != nil {
 		return fmt.Errorf("write output %q: %w", opts.output, err)
 	}
+	logNotice("转换完成: %s", opts.output)
 	return nil
+}
+
+func outputModeName(out outputMode) string {
+	switch out {
+	case outputJSON:
+		return "json"
+	case outputJSON5:
+		return "json5"
+	case outputGolang:
+		return "golang"
+	default:
+		return "unknown"
+	}
+}
+
+func parseModeName(mode parseMode) string {
+	switch mode {
+	case modeJSON:
+		return "json"
+	case modeJSON5:
+		return "json5"
+	default:
+		return "unknown"
+	}
 }
 
 func defaultOutputPath(input string, out outputMode) string {
@@ -237,9 +294,15 @@ func writeFileAtomic(path string, data []byte) (err error) {
 func run(args []string, stderr io.Writer) int {
 	opts, err := parseOptions(args, stderr)
 	if err != nil {
+		if errors.Is(err, pflag.ErrHelp) {
+			return 0
+		}
+		logError("命令行参数错误: %v", err)
 		return 2
 	}
+	logInfo("参数解析完成")
 	if err := convertFile(opts); err != nil {
+		logError("执行失败: %v", err)
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -247,5 +310,32 @@ func run(args []string, stderr io.Writer) int {
 }
 
 func main() {
+	enableProcessLogging()
 	os.Exit(run(os.Args[1:], os.Stderr))
+}
+
+func enableProcessLogging() {
+	processLoggingEnable = true
+	loggerOnce.Do(func() {
+		_ = logs.SetLogger("console", `{"color":false}`)
+		logs.StartLogger()
+	})
+}
+
+func logInfo(format string, args ...any) {
+	if processLoggingEnable {
+		logs.Info(format, args...)
+	}
+}
+
+func logNotice(format string, args ...any) {
+	if processLoggingEnable {
+		logs.Notice(format, args...)
+	}
+}
+
+func logError(format string, args ...any) {
+	if processLoggingEnable {
+		logs.Error(format, args...)
+	}
 }

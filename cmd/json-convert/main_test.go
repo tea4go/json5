@@ -386,6 +386,16 @@ func TestRunReportsParseError(t *testing.T) {
 	}
 }
 
+func TestRunHelpPrintsUsageOnce(t *testing.T) {
+	var stderr bytes.Buffer
+	if code := run([]string{"--help"}, &stderr); code != 0 {
+		t.Fatalf("run() = %d, want 0", code)
+	}
+	if count := strings.Count(stderr.String(), "Usage:"); count != 1 {
+		t.Fatalf("stderr usage count = %d, want 1; stderr = %q", count, stderr.String())
+	}
+}
+
 func TestRunSuccessHasNoStderr(t *testing.T) {
 	dir := t.TempDir()
 	input := filepath.Join(dir, "input.json")
