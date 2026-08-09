@@ -1,37 +1,45 @@
 # json-convert 中文参考手册
 
-`json-convert` 在文件之间双向转换严格 JSON 与本项目支持的 JSON5 子集。转换器使用有序语法树，因此可以保留对象成员顺序、重复键和数字原文；从 JSON5 转为 JSON 时，还可以把对象成员的关联注释转换为 `<字段名>_hint` 字段。
+`json-convert` 在文件之间双向转换严格 JSON 与本项目支持的 JSON5 子集，也可以从 JSON5 推导 Go 对象定义文件。转换器使用有序语法树，因此可以保留对象成员顺序、重复键和数字原文；从 JSON5 转为 JSON 时，还可以把对象成员的关联注释转换为 `<字段名>_hint` 字段。
 
 > [!IMPORTANT]
 > 本工具生成和接受的反引号原始字符串是项目扩展，**不是标准 JSON5 语法**。输出给其他 JSON5 实现前，请先确认对方支持反引号字符串；否则应使用 `--out json` 生成严格 JSON。
 
 ## 快速开始
 
-在 Windows 的 PowerShell 或 Git Bash 中，从仓库根目录运行以下 3 条命令：
+在 Windows 的 PowerShell 或 Git Bash 中，从仓库根目录运行以下 4 条命令：
 
 ```bash
 go build -o json-convert.exe ./cmd/json-convert
 ./json-convert.exe --out json5 input.json output.json5
 ./json-convert.exe --out json --indent 4 input.json5 output.json
+./json-convert.exe --out golang config.json5 config.go
 ```
 
-第一条命令构建 Windows 可执行文件；后两条命令分别执行 JSON → JSON5 和 JSON5 → JSON 转换。Linux/macOS 请将输出文件名改为 `json-convert`，并使用 `./json-convert` 执行。
+第一条命令构建 Windows 可执行文件；后 3 条命令分别执行 JSON → JSON5、JSON5 → JSON 和 JSON5 → Go 定义转换。Linux/macOS 请将输出文件名改为 `json-convert`，并使用 `./json-convert` 执行。
 
 ## 命令语法与参数
 
 ```text
-json-convert --out json|json5 [--indent 0..8] INPUT OUTPUT
+json-convert --out json|json5|golang [--indent 0..8] INPUT [OUTPUT]
 ```
 
 | 参数 | 必填 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `--out json` 或 `--out=json` | 是（二选一） | 无 | 将 JSON5 输入转换为严格 JSON。 |
-| `--out json5` 或 `--out=json5` | 是（二选一） | 无 | 将严格 JSON 输入转换为本项目的 JSON5 格式。 |
-| `--indent N` 或 `--indent=N` | 否 | `2` | 每层缩进的空格数。`N` 必须是 `0`～`8` 的整数；`0` 表示紧凑输出。 |
+| `--out json` 或 `--out=json` | 是（三选一） | 无 | 将 JSON5 输入转换为严格 JSON。 |
+| `--out json5` 或 `--out=json5` | 是（三选一） | 无 | 将严格 JSON 输入转换为本项目的 JSON5 格式。 |
+| `--out golang` 或 `--out=golang` | 是（三选一） | 无 | 将 JSON5 输入转换为 Go 对象定义文件。 |
+| `--indent N` 或 `--indent=N` | 否 | `2` | 每层缩进的空格数。`N` 必须是 `0`～`8` 的整数；`0` 表示紧凑输出。生成 Go 文件时该参数会被忽略。 |
 | `INPUT` | 是 | 无 | 输入文件路径。 |
-| `OUTPUT` | 是 | 无 | 输出文件路径。 |
+| `OUTPUT` | 否 | 自动推导 | 输出文件路径。省略或显式传空时，会自动生成 `<输入名>_convert` 加目标扩展名的文件。 |
 
-位置参数必须**恰好**为 2 个，即一个 `INPUT` 和一个 `OUTPUT`。选项必须写在位置参数之前；底层使用 Go `flag` 解析，遇到第一个位置参数后不再解析后续选项。
+位置参数可以是 1 个或 2 个，即 `INPUT`，以及可选的 `OUTPUT`。当 `OUTPUT` 为空时：
+
+- `--out json` 生成 `<输入名>_convert.json`；
+- `--out json5` 生成 `<输入名>_convert.json5`；
+- `--out golang` 生成 `<输入名>_convert.go`。
+
+选项必须写在位置参数之前；底层使用 Go `flag` 解析，遇到第一个位置参数后不再解析后续选项。
 
 ## 进程行为
 

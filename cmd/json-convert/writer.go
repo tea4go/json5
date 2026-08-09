@@ -12,6 +12,7 @@ type outputMode uint8
 const (
 	outputJSON outputMode = iota
 	outputJSON5
+	outputGolang
 )
 
 type writer struct {

@@ -38,6 +38,15 @@ Convert standard JSON to JSON5:
 go run ./cmd/json-convert --out json5 input.json output.json5
 ```
 
-Use `--indent 0` for compact output. Conversion preserves object member order
-and duplicate keys. When converting JSON5 to JSON, comments attached to an
-object member become a preceding `<name>_hint` member.
+Generate Go struct definitions from JSON5:
+
+```sh
+go run ./cmd/json-convert --out golang config.json5 config.go
+```
+
+When `OUTPUT` is omitted or passed as an empty argument, `json-convert`
+automatically writes to `<input>_convert.json`, `<input>_convert.json5`, or
+`<input>_convert.go` depending on `--out`. Use `--indent 0` for compact JSON or
+JSON5 output. Conversion preserves object member order and duplicate keys. When
+converting JSON5 to JSON, comments attached to an object member become a
+preceding `<name>_hint` member.

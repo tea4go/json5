@@ -31,4 +31,14 @@ go run ./cmd/json-convert --out json input.json5 output.json
 go run ./cmd/json-convert --out json5 input.json output.json5
 ```
 
-使用 `--indent 0` 可输出紧凑格式。转换过程会保留对象成员顺序和重复键。将 JSON5 转换为 JSON 时，附着在对象成员上的注释会变成位于其前面的 `<name>_hint` 成员。
+从 JSON5 生成 Go struct 定义：
+
+```sh
+go run ./cmd/json-convert --out golang config.json5 config.go
+```
+
+当 `OUTPUT` 省略或显式传入空字符串时，`json-convert` 会根据 `--out`
+自动生成 `<input>_convert.json`、`<input>_convert.json5` 或
+`<input>_convert.go`。对 JSON / JSON5 输出可使用 `--indent 0`
+生成紧凑格式。转换过程会保留对象成员顺序和重复键。将 JSON5 转换为
+JSON 时，附着在对象成员上的注释会变成位于其前面的 `<name>_hint` 成员。

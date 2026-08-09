@@ -20,6 +20,8 @@ func TestParseOptions(t *testing.T) {
 		{"json defaults", []string{"--out", "json", "in.json5", "out.json"}, options{out: outputJSON, indent: 2, input: "in.json5", output: "out.json"}},
 		{"json5 and indent", []string{"--indent", "0", "--out=json5", "in.json", "out.json5"}, options{out: outputJSON5, indent: 0, input: "in.json", output: "out.json5"}},
 		{"flags reversed", []string{"--out", "json5", "--indent", "8", "in.json", "out.json5"}, options{out: outputJSON5, indent: 8, input: "in.json", output: "out.json5"}},
+		{"golang defaults output", []string{"--out", "golang", "config.json5"}, options{out: outputGolang, indent: 2, input: "config.json5", output: "config_convert.go"}},
+		{"empty output uses default", []string{"--out", "json", "123.json", ""}, options{out: outputJSON, indent: 2, input: "123.json", output: "123_convert.json"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -52,8 +54,8 @@ func TestParseOptionsRejectsInvalidArgumentsAndPrintsUsage(t *testing.T) {
 		{"indent too large", []string{"--out", "json", "--indent", "9", "in", "out"}},
 		{"indent noninteger", []string{"--out", "json", "--indent", "two", "in", "out"}},
 		{"unknown flag", []string{"--out", "json", "--unknown", "in", "out"}},
-		{"missing positional", []string{"--out", "json", "in"}},
-		{"extra positional", []string{"--out", "json", "in", "out", "extra"}},
+		{"missing positional", []string{"--out", "json"}},
+		{"too many positional", []string{"--out", "json", "in", "out", "extra"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -105,6 +107,37 @@ func TestConvertFileJSON5ToJSON(t *testing.T) {
 		t.Fatalf("decoded = %#v", decoded)
 	}
 	assertOneTrailingLF(t, got)
+}
+
+func TestConvertFileJSON5ToGolang(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "config.json5")
+	outputDir := filepath.Join(dir, "pkgdemo")
+	if err := os.Mkdir(outputDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(outputDir, "config.go")
+	mustWrite(t, input, "{\n  // service host\n  host: `localhost`,\n  ports: [80, 443],\n  tls: {enabled: true},\n}\n")
+
+	if err := convertFile(options{out: outputGolang, indent: 2, input: input, output: output}); err != nil {
+		t.Fatal(err)
+	}
+	got := mustRead(t, output)
+	if !strings.Contains(got, "package pkgdemo") {
+		t.Fatalf("output = %q, want package name based on directory", got)
+	}
+	if !strings.Contains(got, "type Config struct") {
+		t.Fatalf("output = %q, want root struct", got)
+	}
+	if !strings.Contains(got, "// service host") || !strings.Contains(got, "json:\"host\"") || !strings.Contains(got, "Host") || !strings.Contains(got, "string") {
+		t.Fatalf("output = %q, want host field and comment", got)
+	}
+	if !strings.Contains(got, "json:\"ports\"") || !strings.Contains(got, "[]int64") {
+		t.Fatalf("output = %q, want ports slice", got)
+	}
+	if !strings.Contains(got, "json:\"tls\"") || !strings.Contains(got, "type ConfigTls struct") {
+		t.Fatalf("output = %q, want nested struct", got)
+	}
 }
 
 func TestConvertFileRejectsSamePathBeforeReading(t *testing.T) {

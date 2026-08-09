@@ -28,10 +28,10 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	var out string
 	flags := flag.NewFlagSet("json-convert", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	flags.StringVar(&out, "out", "", "output format: json or json5")
+	flags.StringVar(&out, "out", "", "output format: json, json5, or golang")
 	flags.IntVar(&opts.indent, "indent", 2, "indentation spaces (0..8)")
 	flags.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: json-convert --out json|json5 [--indent 0..8] INPUT OUTPUT")
+		fmt.Fprintln(stderr, "Usage: json-convert --out json|json5|golang [--indent 0..8] INPUT [OUTPUT]")
 	}
 	if err := flags.Parse(args); err != nil {
 		flags.Usage()
@@ -42,19 +42,27 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 		opts.out = outputJSON
 	case "json5":
 		opts.out = outputJSON5
+	case "golang":
+		opts.out = outputGolang
 	default:
 		flags.Usage()
-		return options{}, fmt.Errorf("--out must be json or json5")
+		return options{}, fmt.Errorf("--out must be json, json5, or golang")
 	}
 	if opts.indent < 0 || opts.indent > 8 {
 		flags.Usage()
 		return options{}, fmt.Errorf("--indent must be an integer from 0 to 8")
 	}
-	if flags.NArg() != 2 {
+	if flags.NArg() < 1 || flags.NArg() > 2 {
 		flags.Usage()
-		return options{}, fmt.Errorf("expected exactly two file paths")
+		return options{}, fmt.Errorf("expected one or two file paths")
 	}
-	opts.input, opts.output = flags.Arg(0), flags.Arg(1)
+	opts.input = flags.Arg(0)
+	if flags.NArg() == 2 {
+		opts.output = flags.Arg(1)
+	}
+	if opts.output == "" {
+		opts.output = defaultOutputPath(opts.input, opts.out)
+	}
 	return opts, nil
 }
 
@@ -72,17 +80,24 @@ func convertFile(opts options) error {
 		return fmt.Errorf("read input %q: %w", opts.input, err)
 	}
 	mode := modeJSON
-	if opts.out == outputJSON {
+	if opts.out == outputJSON || opts.out == outputGolang {
 		mode = modeJSON5
 	}
 	value, err := parseDocument(data, mode)
 	if err != nil {
 		return fmt.Errorf("parse input %q: %w", opts.input, err)
 	}
-	if opts.out == outputJSON {
+	switch opts.out {
+	case outputJSON:
 		value = addHintMembers(value)
+		data, err = writeDocument(value, opts.out, opts.indent)
+	case outputJSON5:
+		data, err = writeDocument(value, opts.out, opts.indent)
+	case outputGolang:
+		data, err = generateGoDefinitions(value, goPackageName(opts.output), rootTypeName(opts.input))
+	default:
+		err = fmt.Errorf("unsupported output mode")
 	}
-	data, err = writeDocument(value, opts.out, opts.indent)
 	if err != nil {
 		return fmt.Errorf("convert input %q: %w", opts.input, err)
 	}
@@ -90,6 +105,49 @@ func convertFile(opts options) error {
 		return fmt.Errorf("write output %q: %w", opts.output, err)
 	}
 	return nil
+}
+
+func defaultOutputPath(input string, out outputMode) string {
+	dir := filepath.Dir(input)
+	base := filepath.Base(input)
+	ext := filepath.Ext(base)
+	name := strings.TrimSuffix(base, ext)
+	if name == "" {
+		name = strings.TrimLeft(base, ".")
+	}
+	if name == "" {
+		name = "output"
+	}
+	return filepath.Join(dir, name+"_convert"+defaultOutputExt(out))
+}
+
+func defaultOutputExt(out outputMode) string {
+	switch out {
+	case outputJSON:
+		return ".json"
+	case outputJSON5:
+		return ".json5"
+	case outputGolang:
+		return ".go"
+	default:
+		return ".out"
+	}
+}
+
+func goPackageName(output string) string {
+	dir := filepath.Base(filepath.Dir(output))
+	name := goIdentifier(dir, false)
+	if name == "" {
+		return "main"
+	}
+	return name
+}
+
+func rootTypeName(input string) string {
+	base := filepath.Base(input)
+	ext := filepath.Ext(base)
+	name := strings.TrimSuffix(base, ext)
+	return goIdentifier(name, true)
 }
 
 func sameFile(input, output string) (bool, error) {
