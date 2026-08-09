@@ -208,12 +208,12 @@ go run ./cmd/json-convert --out json --indent 2 input.json5 output.json
 
 使用 `--out golang` 时，工具按支持的 JSON5 子集解析输入，并生成经过 `gofmt` 格式化的 Go 源文件。此模式会忽略 `--indent`。传入 2 个文件路径时，第 2 个路径是显式输出路径；只传 `INPUT` 时，输出位于输入文件旁，名称为 `<输入名>_convert.go`。
 
-包名取自输出目录名，并转换为合法的小驼峰标识符。根类型名取自**输入文件名**，移除最后一个扩展名后转换为导出的 Go 标识符。因此，`example/config.json5` → `example/generated.go` 会生成 `package example` 和 `type Config`；只改变输出文件名不会改变 `Config`。标识符不含可用字母或数字时，包名回退为 `main`，类型名回退为 `Root`；首字符是数字时分别添加 `x` 或 `X` 前缀。
+包名取自输出目录名，并清洗为小驼峰标识符形式，但当前不会规避 Go 关键字。输出目录名为 `type`、`package` 等关键字时，生成的包声明会导致 `gofmt` 失败。请选择非关键字目录，或将输出显式指定到合适目录；包名始终由输出目录推导。根类型名取自**输入文件名**，移除最后一个扩展名后转换为导出的 Go 标识符。因此，`example/config.json5` → `example/generated.go` 会生成 `package example` 和 `type Config`；只改变输出文件名不会改变 `Config`。标识符不含可用字母或数字时，包名回退为 `main`，类型名回退为 `Root`；首字符是数字时分别添加 `x` 或 `X` 前缀。
 
 ### 结构、命名、类型与注释
 
 - 顶层对象生成命名结构体，嵌套对象生成额外的命名结构体，数组生成切片。顶层数组或标量生成命名类型，其底层类型为推断出的切片或标量类型。
-- 对象键按标点拆分并转换为导出字段名，原始键始终完整保留在 `json:"..."` tag 中。字段名冲突时添加数字后缀，例如 `DisplayName2`；生成的类型名冲突时采用相同规则。
+- 对象键按标点拆分并转换为导出字段名，原始键通常完整保留在 raw `json:"..."` struct tag 中。含反引号的键无法在该 raw tag 中表示，会导致 `gofmt` 失败；转换前请重命名此类键，或不要使用 `--out golang`。字段名冲突时添加数字后缀，例如 `DisplayName2`；生成的类型名冲突时采用相同规则。
 - 布尔值、字符串、整数和非整数分别推断为 `bool`、`string`、`int64` 和 `float64`，十六进制整数也推断为 `int64`。`null`、空数组的元素、不兼容的混合值及其他未知值推断为 `any`。
 - 工具会合并数组中全部元素的类型：整数与浮点数合并为 `float64`，对象元素递归合并字段，不兼容类型合并为 `any`。对象元素缺失的字段仍会生成为普通字段；生成器不会添加指针或 `omitempty`。
 - 与对象成员关联的前置注释和同行尾随注释经清理后，生成为 Go 字段上方的 `//` 注释。此模式**不会**生成 `_hint` 字段；已有的 `_hint` 结尾键只是普通字段，处理方式与其他键相同。
@@ -407,6 +407,8 @@ go run ./cmd/json-convert --out golang example/config.json5
 | `parse input ...`（`--out json5`） | `--out json5` 的输入必须是严格 JSON，但输入含注释、单引号字符串、未加引号的键、尾随逗号等 JSON5 语法。 | 将输入改为严格 JSON；如果输入本来是 JSON5 并要转成 JSON，请改用 `--out json`。 |
 | `non-finite number ... is not valid JSON` | 尝试把 `Infinity` 或 `NaN` 写成严格 JSON。 | 改为有限数，或保留为字符串。 |
 | `invalid UTF-8 in string` | raw 字符串包含无效 UTF-8，无法写为严格 JSON。 | 先将内容转成有效 UTF-8。 |
+| `format Go output: ... expected IDENT, found ...`，并出现 `package` 等关键字 | `--out golang` 从输出目录推导出的包名是 Go 关键字。 | 选择非关键字输出目录，或将输出显式指定到合适目录。 |
+| 输入键含反引号时出现 `format Go output: ...` | 生成器无法在 raw struct tag 中表示该反引号。 | 转换前重命名该键，或不要使用 `--out golang`。 |
 | `refuse to replace non-regular output` | 输出是目录、符号链接或其他特殊文件。 | 改用不存在的路径或普通文件。 |
 | `read input` / `write output` | 输入不可读，或输出目录不存在、无权限。 | 检查路径、父目录和文件权限。 |
 | 参数放在 `INPUT` 后未生效 | Go `flag` 在第一个位置参数处停止解析。 | 把全部选项移到 `INPUT OUTPUT` 之前。 |
@@ -446,7 +448,7 @@ printf 'exit=%s\n' "$?"
 | 能力 | 状态 |
 | --- | --- |
 | 文件到文件转换 | 支持。 |
-| 从 JSON5 生成 Go 结构体定义 | 支持；使用 `--out golang`，包名和根类型名分别根据输出目录与输入文件名推导。 |
+| 从 JSON5 生成 Go 结构体定义 | 支持；使用 `--out golang`，包名和根类型名分别根据输出目录与输入文件名推导。不支持 Go 关键字包名和含反引号的键。 |
 | 从 `stdin` 读取或向 `stdout` 输出数据 | 不支持；`-` 也只会被当作普通文件名。 |
 | 原地覆盖输入 | 不支持，包括相同文件的硬链接和符号链接。 |
 | 保留对象成员顺序、重复键 | 支持。 |

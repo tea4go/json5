@@ -208,12 +208,12 @@ Here, `\n` in the input `raw` value consists of two ordinary bytes—a backslash
 
 Use `--out golang` to parse the input as the supported JSON5 subset and generate a `gofmt`-formatted Go source file. `--indent` has no effect in this mode. With two file paths, the second path is the explicit output; with only `INPUT`, the output is written beside the input as `<input-name>_convert.go`.
 
-The package name comes from the output directory name, converted to a valid lower camel-case identifier. The root type name comes from the **input filename**, without its final extension, converted to an exported Go identifier. Therefore, `example/config.json5` → `example/generated.go` produces `package example` and `type Config`; changing only the output filename does not change `Config`. If an identifier has no usable letters or digits, the fallbacks are `main` for the package and `Root` for a type. A leading digit is prefixed with `x` or `X`.
+The package name comes from the output directory name, cleaned into lower camel-case identifier form. This cleanup does not avoid Go keywords: an output directory named `type`, `package`, or another keyword causes `gofmt` to fail. Choose a non-keyword directory name, or explicitly place the output in a suitable directory; the package name is always inferred from the output directory. The root type name comes from the **input filename**, without its final extension, converted to an exported Go identifier. Therefore, `example/config.json5` → `example/generated.go` produces `package example` and `type Config`; changing only the output filename does not change `Config`. If an identifier has no usable letters or digits, the fallbacks are `main` for the package and `Root` for a type. A leading digit is prefixed with `x` or `X`.
 
 ### Structure, Names, Types, and Comments
 
 - A root object becomes a named struct. Nested objects become additional named structs, and arrays become slices. A root array or scalar becomes a named type whose underlying type is the inferred slice or scalar type.
-- Object keys are split at punctuation and converted to exported field names. The exact original key is always retained in a `json:"..."` tag. Field-name collisions receive numeric suffixes such as `DisplayName2`; colliding generated type names are resolved the same way.
+- Object keys are split at punctuation and converted to exported field names. The exact original key is normally retained in a raw `json:"..."` struct tag. A key containing a backtick cannot be represented in that raw tag and causes `gofmt` to fail; rename such keys before conversion or do not use `--out golang`. Field-name collisions receive numeric suffixes such as `DisplayName2`; colliding generated type names are resolved the same way.
 - Booleans, strings, integers, and non-integer numbers map to `bool`, `string`, `int64`, and `float64`. Hexadecimal integer tokens are also inferred as `int64`. `null`, empty-array elements, incompatible mixed values, and otherwise unknown values map to `any`.
 - Array element schemas are merged across all elements. Integer and floating-point values merge to `float64`; object elements merge their fields recursively; incompatible kinds merge to `any`. Missing object fields are still emitted as ordinary fields—generation does not add pointers or `omitempty`.
 - Leading and same-line trailing comments associated with an object member are cleaned and emitted as `//` comments above the Go field. This mode does **not** create `_hint` fields. Existing keys ending in `_hint` are ordinary fields and are treated like any other key.
@@ -407,6 +407,8 @@ When this information must be preserved, use a parser that supports ordered memb
 | `parse input ...` (`--out json5`) | Input to `--out json5` must be strict JSON, but it contains JSON5 syntax such as comments, single-quoted strings, unquoted keys, or trailing commas. | Convert the input to strict JSON. If the input is JSON5 and should become JSON, use `--out json` instead. |
 | `non-finite number ... is not valid JSON` | An attempt was made to write `Infinity` or `NaN` as strict JSON. | Replace it with a finite number or preserve it as a string. |
 | `invalid UTF-8 in string` | A raw string contains invalid UTF-8 and cannot be written as strict JSON. | Convert the content to valid UTF-8 first. |
+| `format Go output: ... expected IDENT, found ...` with a keyword such as `package` | `--out golang` inferred a Go keyword as the package name from the output directory. | Choose a non-keyword output directory, or explicitly place the output in a suitable directory. |
+| `format Go output: ...` for an input key containing a backtick | A backtick cannot be represented inside the raw struct tag generated for the JSON key. | Rename the key before conversion or do not use `--out golang`. |
 | `refuse to replace non-regular output` | The output is a directory, symbolic link, or other special file. | Use a nonexistent path or a regular file. |
 | `read input` / `write output` | The input is unreadable, or the output directory does not exist or is not writable. | Check the paths, parent directory, and file permissions. |
 | An option placed after `INPUT` has no effect | Go `flag` stops parsing at the first positional argument. | Move all options before `INPUT OUTPUT`. |
@@ -446,7 +448,7 @@ printf 'exit=%s\n' "$?"
 | Capability | Status |
 | --- | --- |
 | File-to-file conversion | Supported. |
-| Generating Go struct definitions from JSON5 | Supported with `--out golang`; package and root type names are inferred from the output directory and input filename. |
+| Generating Go struct definitions from JSON5 | Supported with `--out golang`; package and root type names are inferred from the output directory and input filename. Go-keyword package names and keys containing backticks are not supported. |
 | Reading from `stdin` or writing data to `stdout` | Not supported; `-` is treated only as an ordinary filename. |
 | In-place input replacement | Not supported, including hard links and symbolic links to the same file. |
 | Preserving object member order and duplicate keys | Supported. |
