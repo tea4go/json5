@@ -1,4 +1,4 @@
-module github.com/titanous/json5
+module github.com/tea4go/json5
 
 go 1.21
 

@@ -35,7 +35,7 @@ go vet ./...
 
 ### 核心 `json5` 解码包
 
-根目录是仅解码的 `github.com/titanous/json5` 包，公开入口主要是 `Unmarshal`、流式 `Decoder`、`Number` 和 `RawMessage`；仓库没有公共 `Marshal`、`Valid`、`Compact` 或 `Indent` API。实现源自 Go `encoding/json` 的解码架构并扩展 JSON5 语法：
+根目录是仅解码的 `github.com/tea4go/json5` 包，公开入口主要是 `Unmarshal`、流式 `Decoder`、`Number` 和 `RawMessage`；仓库没有公共 `Marshal`、`Valid`、`Compact` 或 `Indent` API。实现源自 Go `encoding/json` 的解码架构并扩展 JSON5 语法：
 
 - `scanner.go` 是逐字节状态机，统一负责语法验证、值边界识别，以及注释、单引号、JSON5 数字、未加引号键和反引号 raw string 的词法状态。
 - `decode.go` 在 scanner 验证后，通过反射把值写入 struct、map、slice 和自定义 `Unmarshaler`；解码到空接口时走非反射快速路径。修改一种字面量通常需要同时检查反射路径、interface 快速路径和 `unquoteBytes`。

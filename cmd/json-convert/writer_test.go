@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	json5 "github.com/titanous/json5"
+	json5 "github.com/tea4go/json5"
 )
 
 func TestWriteJSON5PreservesStringsMembersAndNumberLexemes(t *testing.T) {

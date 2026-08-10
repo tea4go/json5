@@ -2,7 +2,7 @@
 
 本文说明本仓库中 `json5` 解码器与 `json-convert` 工具涉及的 JSON5 格式语法。为避免歧义，文中会区分：
 
-- 根包 `github.com/titanous/json5` 的解码能力；
+- 根包 `github.com/tea4go/json5` 的解码能力；
 - `cmd/json-convert` 在 `--out json` 时接受的 JSON5 子集；
 - 本仓库额外支持的非标准反引号 raw string 扩展。
 

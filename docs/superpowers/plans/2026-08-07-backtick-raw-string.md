@@ -467,7 +467,7 @@ git status --short
 go test ./...
 ```
 
-预期：包 `github.com/titanous/json5` 显示 `ok`，退出码为 0。
+预期：包 `github.com/tea4go/json5` 显示 `ok`，退出码为 0。
 
 - [ ] **步骤 4：重复运行扩展测试排除状态污染**
 

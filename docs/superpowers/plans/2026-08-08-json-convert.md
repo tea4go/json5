@@ -477,7 +477,7 @@ func (w *writer) writeJSON5String(text []byte) {
 
 - [ ] **步骤 5：运行 writer 测试并验证 JSON5 可回读**
 
-追加 round-trip：用项目包 `github.com/titanous/json5` 的 `Unmarshal` 解码 writer 输出，确认字符串语义正确。运行：
+追加 round-trip：用项目包 `github.com/tea4go/json5` 的 `Unmarshal` 解码 writer 输出，确认字符串语义正确。运行：
 
 ```bash
 gofmt -w cmd/json-convert/writer.go cmd/json-convert/writer_test.go
